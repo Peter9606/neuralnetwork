@@ -1,0 +1,9 @@
+# config
+
+# data, archive
+data
+
+# build
+build
+*.pyc
+bin
