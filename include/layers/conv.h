@@ -4,52 +4,14 @@
 
 // self
 #include "layer.h"
+#include "layers/config.h"
 
 namespace nn
 {
 namespace layers
 {
-/** @struct Pad
- * Horizontal and vertical direction padding.
- */
-struct Pad
-{
-    int height;
-    int width;
-};
-
-/** @struct Stride
- * Horizontal and vertical stride.
- */
-struct Stride
-{
-    int vertical;
-    int horizontal;
-};
-
-/** @struct Kernel
- * kernel size and kernel number
- */
-struct Kernel
-{
-    int height;
-    int width;
-    int channel;
-};
-
-/** @struct Dilation
- * Filter height and width dilation
- */
-struct Dilation
-{
-    int height;
-    int width;
-};
-
 /** @class Conv
  * @brief Convolution layer
- *
- * Current only support one upstream layer.
  */
 class Conv : public Layer
 {
@@ -59,19 +21,65 @@ public:
      *
      * @param[in] name      layer name
      * @param[in] network   Network interface handle
-     * @param[in] upstreams upstream layer vector
+     * @param[in] up        upstream layer
+     * @param[in] kernel    kernel parameter
      * @param[in] pad       pad parameter
      * @param[in] stride    stride parameter
-     * @param[in] kernel    kernel parameter
      * @param[in] dilation  dilation parameter
      */
     Conv(const std::string& name,
          const NetworkConstPtr& network,
-         const LayerConstPtrVec& upstreams,
+         const LayerConstPtr& up,
+         const Kernel& kernel,
          const Pad& pad,
          const Stride& stride,
-         const Kernel& kernel,
          const Dilation& dilation);
+
+    /**
+     * Conv constructor, with dilation set to 1 in both directions
+     *
+     * @param[in] name      layer name
+     * @param[in] network   Network interface handle
+     * @param[in] up        upstream layer
+     * @param[in] kernel    kernel parameter
+     * @param[in] pad       pad parameter
+     * @param[in] stride    stride parameter
+     */
+    Conv(const std::string& name,
+         const NetworkConstPtr& network,
+         const LayerConstPtr& up,
+         const Kernel& kernel,
+         const Pad& pad,
+         const Stride& stride);
+
+    /**
+     * Conv constructor, with stride and dilation set to 1 in both directions
+     *
+     * @param[in] name      layer name
+     * @param[in] network   Network interface handle
+     * @param[in] up        upstream layer
+     * @param[in] kernel    kernel parameter
+     * @param[in] pad       pad parameter
+     */
+    Conv(const std::string& name,
+         const NetworkConstPtr& network,
+         const LayerConstPtr& up,
+         const Kernel& kernel,
+         const Pad& pad);
+
+    /**
+     * Conv constructor, with no padding, stride and dilation set to 1 in both
+     * directions
+     *
+     * @param[in] name      layer name
+     * @param[in] network   Network interface handle
+     * @param[in] up        upstream layer
+     * @param[in] kernel    kernel parameter
+     */
+    Conv(const std::string& name,
+         const NetworkConstPtr& network,
+         const LayerConstPtr& up,
+         const Kernel& kernel);
 
     /**
      * Desctructor
@@ -79,96 +87,99 @@ public:
     virtual ~Conv();
 
     /**
-     * forward propagation
+     * @brief load parameters from given data existing in host.
+     *
+     * parameters consists of two parts: filters and bias. in either host and
+     * device, parameters are continuous, first filters then bias.
+     *
+     * @param[in] h_params a float vector contains current layer's
+     * parameters
      */
-    virtual void fwdPropagation();
+    void loadParameters(const shared_ptr<vector<float>>& h_params) final;
 
     /**
-     * backward propagation
+     * copy parameters from device to host
+     *
+     * parameters consists of two parts: filters and bias. in either host and
+     * device, parameters are continuous, first filters then bias.
+     *
+     * @return a float vector
      */
-    virtual void bwdPropagation();
+    shared_ptr<vector<float>> saveParameters() final;
 
     /**
      * prepare forward propagation
-     */
-    virtual void setFwdPropagation();
-
-private:
-    /**
-     * create convolution tensor and alloc memory on device, gradient as well
-     * if applicable
      *
-     * @return total size of device memory in byte
+     * @return allocated memory size on GPU in bytes.
      */
-    size_t Conv::constructConvlutionTensor();
+    size_t prepareFwdPropagation() final;
 
     /**
-     * destroy convolution tensor and its allocated memory from device, gradient
-     * as well if applicable
+     * prepare backward propagation
+     *
+     * @return allocated memory size on GPU in bytes.
      */
-    void Conv::destroyConvolutionTensor();
+    size_t prepareBwdPropagation() final;
 
     /**
-     * construct filter tensor and alloc memory on device, gradient as
-     * well if applicable
+     * run forward propagation
      */
-    size_t Conv::constructFilterTensor();
+    void fwdPropagation() final;
 
     /**
-     * destroy filter tensor and its allocated memory from deice, gradient as
-     * well if applicable
+     * run backward propgation
      */
-    void Conv::destroyFilterTensor();
+    void bwdPropagation() final;
 
     /**
-     * create bias tensor and alloc memory on device, gradient as well if
-     * applicable
+     * update weights
      */
-    size_t Conv::constructBiasTensor();
+    void updateWeights() final;
 
     /**
-     * destroy bias tensor and its allocated memory from device, gradient as
-     * well if applicable
+     * get output tensor descriptor
+     *
+     * @return output tensor descriptor
      */
-    void Conv::destroyBiasTensor();
+    cudnnTensorDescriptor_t getYDescriptor() const;
 
-private:
-    struct  // Adam parameters
-    {
-        // size_t t = 0;
-        float* d_m_f = nullptr;  // Adam moment parameter for filter
-        float* d_v_f = nullptr;
-        float* d_m_b = nullptr;  // Adam moment parameter for bias
-        float* d_v_b = nullptr;
-        float* tmp_f = nullptr;  // for g*g usage and other uses
-        float* tmp_b = nullptr;
-    } adam;
+    /**
+     * get output tensor
+     *
+     * @return pointer to output tensor on device
+     */
+    float* getY() const;
 
-    struct  // mSGD parameters
-    {
-        float* d_v_f = nullptr;
-        float* d_v_b = nullptr;
-    } msgd;
+    /**
+     * get gradient, for Input layer always return nullptr
+     *
+     * @return nullptr
+     */
+    float* getGradient() const;
 
-private:
+public:
+    // TODO(Peter Han): need pricesly access control over members,
+    // currently for debug convinient all set to public
+    const Kernel kernel_;
     const Pad pad_;
     const Stride stride_;
-    const Kernel kernel_;
     const Dilation dilation_;
-    const LayerConstPtr upstream_;
 
-    float* filter_          = nullptr;
-    float* filter_gradient_ = nullptr;
-    float* bias_            = nullptr;
-    float* bias_gradient_   = nullptr;
-
-    cudnnFilterDescriptor_t filter_desc_;
+    cudnnTensorDescriptor_t y_desc_;
     cudnnTensorDescriptor_t bias_desc_;
+    cudnnFilterDescriptor_t filter_desc_;
     cudnnConvolutionDescriptor_t conv_desc_;
-
     cudnnConvolutionFwdAlgo_t fwd_algo_;
+
     cudnnConvolutionBwdFilterAlgo_t bwd_filter_algo_;
     cudnnConvolutionBwdDataAlgo_t bwd_data_algo_;
+
+    float* d_filter_  = nullptr;
+    float* d_bias_    = nullptr;
+    float* d_y_       = nullptr;
+    float* d_dfilter_ = nullptr;
+    float* d_dbias_   = nullptr;
+    float* d_dy_      = nullptr;
 };
 
 }  // namespace layers

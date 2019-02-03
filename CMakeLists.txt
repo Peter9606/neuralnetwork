@@ -40,16 +40,15 @@ set(NN_LIB nn)
 add_library(nn SHARED
     src/network_impl.cpp
     src/layer.cpp
-    src/layers/input.cpp
+    src/layers/activation.cpp
     src/layers/conv.cpp
-    src/layers/sigmoid.cpp
-    src/layers/relu.cpp
     src/layers/dropout.cpp
-    src/layers/max_pool.cpp
-    src/layers/avg_pool.cpp
-    src/layers/unpool.cpp
     src/layers/fc.cpp
+    src/layers/input.cpp
+    src/layers/pool.cpp
     src/layers/softmax.cpp
+    src/layers/unpool.cpp
+    src/gpu/compution.cu
 )
 target_link_libraries(${NN_LIB} ${CUDA_cublas_LIBRARY})
 target_link_libraries(${NN_LIB} ${CUDA_curand_LIBRARY})

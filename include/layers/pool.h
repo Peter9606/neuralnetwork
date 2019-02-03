@@ -10,29 +10,41 @@ namespace nn
 {
 namespace layers
 {
-/** @class Softmax
- * @brief Softmax
+/** @class Pool
+ * @brief Pool support max pooling
  */
-class Softmax : public Layer
+class Pool : public Layer
 {
 public:
+    enum Type : int
+    {
+        MAX,
+    };
+
+public:
     /**
-     * Softmax constructor
+     * Pool constructor
      *
      * @param[in] name              layer name
      * @param[in] network           Network interface handle
      * @param[in] up                upstream layer
-     * @param[in] in_place          in place or not
+     * @param[in] window            pooling window
+     * @param[in] pad               padding
+     * @param[in] stride            stride
+     * @param[in] type              pooling type
      */
-    Softmax(const std::string& name,
-            const NetworkConstPtr& network,
-            const LayerConstPtr& up,
-            bool in_place);
+    Pool(const std::string& name,
+         const NetworkConstPtr& network,
+         const LayerConstPtr& up,
+         const Window& window,
+         const Pad& pad,
+         const Stride& stride,
+         Type type);
 
     /**
      * Desctructor
      */
-    virtual ~Softmax();
+    virtual ~Pool();
 
     /**
      * prepare forward propagation
@@ -57,11 +69,6 @@ public:
      * run backward propgation
      */
     void bwdPropagation() final;
-
-    /**
-     * update weights
-     */
-    void updateWeights() final;
 
     /**
      * get output tensor descriptor
@@ -90,9 +97,14 @@ public:
     float* getGradient() const;
 
 private:
-    const bool in_place_;
+    const Window window_;
+    const Pad pad_;
+    const Stride stride_;
+    const Type type_;
 
+    cudnnPoolingDescriptor_t pool_desc_;
     cudnnTensorDescriptor_t y_desc_;
+
     float* d_y_  = nullptr;
     float* d_dy_ = nullptr;
 };

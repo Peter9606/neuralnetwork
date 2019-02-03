@@ -8,43 +8,68 @@ namespace layers
 {
 /** @class Input
  * @brief A layer take the input data, sepcificly image in CNN.
- *
- * As all other types of layer, Input layer only handle data which already
- * exists in device. So it's the client's responsibility to move image data from
- * host to device, and then call pass to Input layer.
  */
 class Input : public Layer
 {
 public:
     /**
-     * Constructor of Input layer
+     * constructor of Input layer
      *
      * @param[in] name      layer name
-     * @param[in] network   Network interface handle
-     * @param[in] height    height of input image
-     * @param[in] width     width of input image
-     * @param[in] channel   channel of input image
+     * @param[in] network   Network handle
+     * @param[in] c         image channel
+     * @param[in] h         image height
+     * @param[in] w         image width
      */
     Input(const std::string& name,
           const NetworkConstPtr& network,
-          int height,
-          int width,
-          int channel);
-
-    virtual ~Input() = default;
+          int c,
+          int h,
+          int w);
 
     /**
-     * Pass image data into network via Input layer
-     *
-     * @param[in] data      data of batch images
+     * destroctor
      */
-    void inputData(float* data);
+    virtual ~Input();
+
+    /**
+     * @brief prepare forward propagation
+     * Set tensor descriptor and alloc memory on GPU
+     *
+     * @return total allocated GPU memory in bytes
+     */
+    size_t prepareFwdPropagation() final;
+
+    /**
+     * run forward propagation
+     */
+    void fwdPropagation() final;
+
+    /**
+     * get output tensor descriptor
+     *
+     * @return output tensor descriptor
+     */
+    cudnnTensorDescriptor_t getYDescriptor() const;
+
+    /**
+     * get output tensor
+     *
+     * @return pointer to output tensor on device
+     */
+    float* getY() const;
+
+    /**
+     * get output dim
+     *
+     * @return dim of output tensor
+     */
+    Dim getDim() const;
 
 private:
-    const int height_;
-    const int width_;
-    const int channel_;
-    const LayerConstPtr upstream_;
+    cudnnTensorDescriptor_t y_desc_;
+
+    float* d_y_ = nullptr;
 };
 
 }  // namespace layers

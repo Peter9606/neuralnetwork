@@ -8,21 +8,56 @@ namespace layers
 {
 Input::Input(const std::string& name,
              const NetworkConstPtr& network,
-             int width,
-             int height,
-             int channel)
-    : Layer(name, Layer::INPUT, network, {})
-    , height_(height)
-    , width_(width)
-    , channel_(channel)
+             int c,
+             int h,
+             int w)
+    : Layer(name, network, nullptr)
 {
+    c_ = c;
+    h_ = h;
+    w_ = w;
 }
 
-void Input::inputData(float* data)
+Input::~Input()
 {
-    const size_t len =
-        network_->getBatchSize() * channel_ * height_ * width_ * sizeof(float);
-    checkCudaErrors(cudaMemcpy(data, tensor_, len, cudaMemcpyDeviceToDevice));
+    checkCUDNN(cudnnDestroyTensorDescriptor(y_desc_));
+    checkCudaErrors(cudaFree(d_y_));
+}
+
+size_t Input::prepareFwdPropagation()
+{
+    NetworkConstPtr network = network_.lock();
+    assert(("Network is expired", network));
+    const size_t size = sizeof(float) * n_ * c_ * h_ * w_;
+
+    checkCUDNN(cudnnCreateTensorDescriptor(&y_desc_));
+    checkCUDNN(cudnnSetTensor4dDescriptor(
+        y_desc_, CUDNN_TENSOR_NCHW, CUDNN_DATA_FLOAT, n_, c_, h_, w_));
+
+    checkCudaErrors(cudaMalloc(&d_y_, size));
+
+    return size;
+}
+
+void Input::fwdPropagation()
+{
+    // TODO(Peter Han)
+}
+
+cudnnTensorDescriptor_t Input::getYDescriptor() const
+{
+    return y_desc_;
+}
+
+float* Input::getY() const
+{
+    return d_y_;
+}
+
+Dim Input::getDim() const
+{
+    Dim d = {c_, h_, w_};
+    return d;
 }
 
 }  // namespace layers

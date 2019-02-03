@@ -4,35 +4,49 @@
 
 // self
 #include "layer.h"
-#include "layers/config.h"
 
 namespace nn
 {
 namespace layers
 {
-/** @class Softmax
- * @brief Softmax
+/** @class Activation
+ * @brief Activation layer, support ReLU, Sigmoid, Tanh, Clipped ReLU and ELU
  */
-class Softmax : public Layer
+class Activation : public Layer
 {
 public:
+    enum Type : int
+    {
+        SIGMOID,
+        RELU,
+        TANH,
+        CLIPPED_RELU,
+        ELU,
+    };
+
+public:
     /**
-     * Softmax constructor
+     * Activation constructor
      *
      * @param[in] name              layer name
      * @param[in] network           Network interface handle
      * @param[in] up                upstream layer
-     * @param[in] in_place          in place or not
+     * @param[in] type              activation type
+     * @param[in] coef              clipping threashold for clipped relu or
+     * alpha for elu
+     * @param[in] in_place          in place
      */
-    Softmax(const std::string& name,
-            const NetworkConstPtr& network,
-            const LayerConstPtr& up,
-            bool in_place);
+    Activation(const std::string& name,
+               const NetworkConstPtr& network,
+               const LayerConstPtr& up,
+               Type type     = RELU,
+               double coef   = 0.0,
+               bool in_place = true);
 
     /**
      * Desctructor
      */
-    virtual ~Softmax();
+    virtual ~Activation();
 
     /**
      * prepare forward propagation
@@ -78,21 +92,18 @@ public:
     float* getY() const;
 
     /**
-     * get output dimension
-     */
-    Dim getDim() const;
-
-    /**
-     * get gradient, for Input layer always return nullptr
-     *
      * @return nullptr
      */
     float* getGradient() const;
 
 private:
+    const Type type_;
+    const double coef_;
     const bool in_place_;
 
+    cudnnActivationDescriptor_t activation_desc_;
     cudnnTensorDescriptor_t y_desc_;
+
     float* d_y_  = nullptr;
     float* d_dy_ = nullptr;
 };

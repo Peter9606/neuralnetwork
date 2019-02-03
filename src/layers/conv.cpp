@@ -9,280 +9,333 @@ namespace layers
 {
 Conv::Conv(const std::string& name,
            const NetworkConstPtr& network,
-           const LayerConstPtrVec& upstreams,
+           const LayerConstPtr& up,
+           const Kernel& kernel,
            const Pad& pad,
            const Stride& stride,
-           const Kernel& kernel,
            const Dilation& dilation)
-    : Layer(name, Layer::CONV, network, upstreams)
+    : Layer(name, network, up)
+    , kernel_(kernel)
     , pad_(pad)
     , stride_(stride)
-    , kernel_(kernel)
     , dilation_(dilation)
-    , upstream_(upstreams[0])
+{
+}
+
+Conv::Conv(const std::string& name,
+           const NetworkConstPtr& network,
+           const LayerConstPtr& up,
+           const Kernel& kernel,
+           const Pad& pad,
+           const Stride& stride)
+    : Conv(name, network, up, kernel, pad, stride, {1, 1})
+{
+}
+
+Conv::Conv(const std::string& name,
+           const NetworkConstPtr& network,
+           const LayerConstPtr& up,
+           const Kernel& kernel,
+           const Pad& pad)
+    : Conv(name, network, up, kernel, pad, {1, 1})
+{
+}
+
+Conv::Conv(const std::string& name,
+           const NetworkConstPtr& network,
+           const LayerConstPtr& up,
+           const Kernel& kernel)
+    : Conv(name, network, up, kernel, {0, 0}, {1, 1})
 {
 }
 
 Conv::~Conv()
 {
-    destroyConvolutionTensor();
-    destroyFilterTensor();
-    destroyBiasTensor();
+    checkCUDNN(cudnnDestroyTensorDescriptor(y_desc_));
+    checkCUDNN(cudnnDestroyTensorDescriptor(bias_desc_));
+
+    checkCUDNN(cudnnDestroyFilterDescriptor(filter_desc_));
+    checkCUDNN(cudnnDestroyConvolutionDescriptor(conv_desc_));
+
+    checkCudaErrors(cudaFree(d_bias_));
+    checkCudaErrors(cudaFree(d_filter_));
+    checkCudaErrors(cudaFree(d_y_));
+    checkCudaErrors(cudaFree(d_dbias_));
+    checkCudaErrors(cudaFree(d_dfilter_));
+    checkCudaErrors(cudaFree(d_dy_));
 }
 
-size_t Conv::constructConvlutionTensor()
+void Conv::loadParameters(const shared_ptr<vector<float>>& h_params)
 {
-    // convolution descriptor
+    // before loading parameters, all pointers on device should be null,
+    // otherwise memory leak on device, which also is NOT the scenario
+    assert(!d_filter_);
+    assert(!d_bias_);
+
+    // only one bias corresponding to one filter
+    const size_t filter_num = kernel_.channel;
+    size_t one_filter_count = h_params->size() / filter_num - 1;  // 1 is bias
+    size_t filter_bytes     = one_filter_count * sizeof(float) * filter_num;
+    size_t bias_bytes       = 1 * sizeof(float) * filter_num;
+
+    // move filters and bias to device
+    checkCudaErrors(cudaMemcpyAsync(
+        d_filter_, h_params->data(), filter_bytes, cudaMemcpyHostToDevice));
+    checkCudaErrors(
+        cudaMemcpyAsync(d_bias_,
+                        &h_params->data()[one_filter_count * filter_num],
+                        bias_bytes,
+                        cudaMemcpyHostToDevice));
+}
+
+shared_ptr<vector<float>> Conv::saveParameters()
+{
+    assert(d_filter_);
+    assert(d_bias_);
+
+    // TODO(Peter Han): NUST have already known the input feature map size
+    // and channels
+}
+
+size_t Conv::prepareFwdPropagation()
+{
+    NetworkConstPtr nn = network_.lock();
+    assert(("Network is expired", nn));
+    LayerConstPtr up = up_.lock();
+    assert(("Upstream is expired", up));
+
+    // create descriptors
     checkCUDNN(cudnnCreateConvolutionDescriptor(&conv_desc_));
+    checkCUDNN(cudnnCreateFilterDescriptor(&filter_desc_));
+    checkCUDNN(cudnnCreateTensorDescriptor(&bias_desc_));
+    checkCUDNN(cudnnCreateTensorDescriptor(&y_desc_));
+
+    // compute output dimension and set descriptors
+    cudnnTensorDescriptor_t x_desc = up->getYDescriptor();
+    int n;
+    checkCUDNN(cudnnGetConvolution2dForwardOutputDim(
+        conv_desc_, x_desc, filter_desc_, &n, &c_, &h_, &w_));
+    assert(("Batch size doesn't match", n == n_));
+    assert(("Channel doesn't match", kernel_.channel == c_));
+
     checkCUDNN(cudnnSetConvolution2dDescriptor(conv_desc_,
-                                               pad_.height,
-                                               pad_.width,
-                                               stride_.horizontal,
+                                               pad_.vertical,
+                                               pad_.horizontal,
                                                stride_.vertical,
+                                               stride_.horizontal,
                                                dilation_.height,
                                                dilation_.width,
                                                CUDNN_CROSS_CORRELATION,
                                                CUDNN_DATA_FLOAT));
-}
-
-void Conv::destroyConvolutionTensor()
-{
-    checkCUDNN(cudnnDestroyConvolutionDescriptor(conv_desc_));
-}
-
-size_t Conv::constructFilterTensor()
-{
-    size_t total_space  = 0;
-    int input_channel   = upstream_->getOutputTensorDim().z;
-    size_t filter_space = sizeof(float) * input_channel * kernel_.height *
-                          kernel_.width * kernel_.channel;
-
-    checkCUDNN(cudnnCreateFilterDescriptor(&filter_desc_));
     checkCUDNN(cudnnSetFilter4dDescriptor(filter_desc_,
                                           CUDNN_DATA_FLOAT,
                                           CUDNN_TENSOR_NCHW,
                                           kernel_.channel,
-                                          input_channel,
-                                          kernel_.height,
-                                          kernel_.width));
-    total_space += filter_sapce;
-    checkCudaErrors(cudaMalloc(&filter_, filter_space));
+                                          c_,
+                                          h_,
+                                          w_));
+    checkCUDNN(cudnnSetTensor4dDescriptor(
+        y_desc_, CUDNN_TENSOR_NCHW, CUDNN_DATA_FLOAT, n_, c_, h_, w_));
+    checkCUDNN(cudnnSetTensor4dDescriptor(
+        bias_desc_, CUDNN_TENSOR_NCHW, CUDNN_DATA_FLOAT, 1, c_, 1, 1));
 
-    if (network_->isInferenceOnly())
-    {
-        return total;
-    }
+    // alloc memory
+    const size_t tensor_size = sizeof(float) * n_ * c_ * h_ * w_;
+    const size_t bias_size   = sizeof(float) * c_;
+    const size_t filter_size =
+        sizeof(float) * kernel_.height * kernel_.width * kernel_.channel;
+    const size_t total = tensor_size + bias_size + filter_size;
 
-    checkCudaErrors(cudaMalloc(&filter_gradient_, filter_space));
-    total_space += filter_sapce;
-    return total_space;
+    checkCudaErrors(cudaMalloc(&d_y_, tensor_size));
+    checkCudaErrors(cudaMalloc(&d_bias_, bias_size));
+    checkCudaErrors(cudaMalloc(&d_filter_, filter_size));
+
+    // find best suited algorithm and update Network's workspace size
+    size_t workspace_size = 0;
+    checkCUDNN(cudnnGetConvolutionForwardAlgorithm(
+        nn->getCudnnHandle(),
+        up->getYDescriptor(),
+        filter_desc_,
+        conv_desc_,
+        y_desc_,
+        CUDNN_CONVOLUTION_FWD_PREFER_FASTEST,
+        0,
+        &fwd_algo_));
+    checkCUDNN(cudnnGetConvolutionForwardWorkspaceSize(nn->getCudnnHandle(),
+                                                       up->getYDescriptor(),
+                                                       filter_desc_,
+                                                       conv_desc_,
+                                                       y_desc_,
+                                                       fwd_algo_,
+                                                       &workspace_size));
+    nn->updateWorkspaceSize(workspace_size);
+
+    return total;
 }
 
-void Conv::destroyFilterTensor()
+size_t Conv::prepareBwdPropagation()
 {
-    checkCUDNN(cudnnDestroyFilterDescriptor(filter_desc_));
-    checkCudaErrors(cudaFree(filter_));
-    filter_ = nullptr;
-    checkCudaErrors(cudaFree(filter_gradient_));
-    filter_gradient = nullptr;
+    NetworkConstPtr nn = network_.lock();
+    assert(("Network is expired", nn));
+    LayerConstPtr up = up_.lock();
+    assert(("Upstream is expired", up));
+
+    size_t workspace_size          = 0;
+    cudnnHandle_t cudnn_handle     = nn->getCudnnHandle();
+    cudnnTensorDescriptor_t x_desc = up->getYDescriptor();
+    const size_t tensor_size       = sizeof(float) * n_ * c_ * h_ * w_;
+    const size_t bias_size         = sizeof(float) * c_;
+    const size_t filter_size =
+        sizeof(float) * kernel_.height * kernel_.width * kernel_.channel;
+    const size_t total = tensor_size + bias_size + filter_size;
+
+    checkCudaErrors(cudaMalloc(&d_dy_, tensor_size));
+    checkCudaErrors(cudaMalloc(&d_dbias_, bias_size));
+    checkCudaErrors(cudaMalloc(&d_dfilter_, filter_size));
+
+    checkCUDNN(cudnnGetConvolutionBackwardFilterAlgorithm(
+        cudnn_handle,
+        x_desc,
+        y_desc_, /* dyDesc == yDesc */
+        conv_desc_,
+        filter_desc_,
+        CUDNN_CONVOLUTION_BWD_FILTER_PREFER_FASTEST,
+        0,
+        &bwd_filter_algo_));
+    checkCUDNN(cudnnGetConvolutionBackwardFilterWorkspaceSize(cudnn_handle,
+                                                              x_desc,
+                                                              y_desc_,
+                                                              conv_desc_,
+                                                              filter_desc_,
+                                                              bwd_filter_algo_,
+                                                              &workspace_size));
+    nn->updateWorkspaceSize(workspace_size);
+
+    checkCUDNN(cudnnGetConvolutionBackwardDataAlgorithm(
+        cudnn_handle,
+        filter_desc_,
+        y_desc_,
+        conv_desc_,
+        x_desc,
+        CUDNN_CONVOLUTION_BWD_DATA_PREFER_FASTEST,
+        0,
+        &bwd_data_algo_));
+    checkCUDNN(cudnnGetConvolutionBackwardDataWorkspaceSize(cudnn_handle,
+                                                            filter_desc_,
+                                                            y_desc_,
+                                                            conv_desc_,
+                                                            x_desc,
+                                                            bwd_data_algo_,
+                                                            &workspace_size));
+    nn->updateWorkspaceSize(workspace_size);
+
+    return total;
 }
 
-size_t Conv::constructBiasTensor()
+void Conv::fwdPropagation()
 {
-    size_t total_space = 0;
-    checkCUDNN(cudnnCreateTensorDescriptor(&bias_desc_));
-    checkCUDNN(cudnnSetTensor4dDescriptor(bias_desc_,
-                                          CUDNN_TENSOR_NCHW,
-                                          CUDNN_DATA_FLOAT,
-                                          1,
-                                          kernel_.channel,
-                                          1,
-                                          1));
-    size_t bias_space = sizeof(float) * kernel_.channel;
-    checkCudaErrors(cudaMalloc(&bias_, bias_space));
-    total_space += bias_sapce;
-    if (network_->isInferenceOnly())
-    {
-        checkCudaErrors(cudaMalloc(&bias_gradient_, bias_space));
-        total_space += bias_sapce;
-    }
-    return total_space;
+    NetworkConstPtr nn = network_.lock();
+    assert(("Network is expired", nn));
+    LayerConstPtr up = up_.lock();
+    assert(("Upstream is expired", up));
+
+    cudnnHandle_t cudnn_handle     = nn->getCudnnHandle();
+    float* d_workspace             = nn->getWorkspace();
+    size_t workspace_size          = nn->getWorkspaceSize();
+    const float* alpha             = nn->getAlpha();
+    const float* beta              = nn->getBeta();
+    cudnnTensorDescriptor_t x_desc = up->getYDescriptor();
+    float* d_x                     = up->getY();
+
+    checkCUDNN(cudnnConvolutionForward(cudnn_handle,
+                                       alpha,
+                                       x_desc,
+                                       d_x,
+                                       filter_desc_,
+                                       d_filter_,
+                                       conv_desc_,
+                                       fwd_algo_,
+                                       d_workspace,
+                                       workspace_size,
+                                       beta,
+                                       y_desc_,
+                                       d_y_));
+    checkCUDNN(cudnnAddTensor(
+        cudnn_handle, &alpha, bias_desc_, d_bias_, alpha, y_desc_, d_y_));
 }
 
-void Conv::destroyBiasTensor()
+void Conv::bwdPropagation()
 {
-    checkCUDNN(cudnnDestroyTensorDescriptor(bias_desc_));
-    checkCudaErrors(cudaFree(bias_));
-    bias_ = nullptr;
-    checkCudaErrors(cudaFree(bias_gradient_));
-    bias_gradient_ = nullptr;
+    // TODO(Peter Han): Should review all bwdPropagation methods, figure out x,
+    // y, dx, dy .  Dont have to hold down_ in layer ???
+
+    /*
+        NetworkConstPtr nn = network_.lock();
+        assert(("Network is expired", nn));
+        LayerConstPtr up = up_.lock();
+        assert(("Upstream is expired", up));
+        LayerConstPtr down = down_.lock();
+        assert(("Downstream is expired", down));
+
+        cudnnHandle_t cudnnHandle      = nn->getCudnnHandle();
+        float* d_workspace             = nn->getWorkspace();
+        size_t workspace_size          = nn->getWorkspaceSize();
+        const float* alpha             = nn->getAlpha();
+        const float* beta              = nn->getBeta();
+        cudnnTensorDescriptor_t x_desc = up->getYDescriptor();
+        float* d_x                     = up->getY();
+        float* d_downstream_gradient   = down->getGradient();
+
+        checkCUDNN(cudnnConvolutionBackwardBias(cudnnHandle,
+                                                alpha,
+                                                y_desc_,
+                                                d_downstream_gradient,
+                                                beta,
+                                                bias_desc_,
+                                                d_bias_gradient_));
+
+        checkCUDNN(cudnnConvolutionBackwardFilter(cudnnHandle,
+                                                  alpha,
+                                                  x_desc,
+                                                  d_x,
+                                                  y_desc_,
+                                                  d_dy_,
+                                                  conv_desc_,
+                                                  bwd_filter_algo_,
+                                                  d_workspace,
+                                                  workspace_size,
+                                                  beta,
+                                                  filter_desc_,
+                                                  d_filter_gradient_));
+
+        checkCUDNN(cudnnConvolutionBackwardData(cudnnHandle,
+                                                alpha,
+                                                filter_desc_,
+                                                d_filter_,
+                                                y_desc_,
+                                                d_downstream_gradient,
+                                                conv_desc_,
+                                                bwd_data_algo_,
+                                                d_workspace,
+                                                workspace_size,
+                                                beta,
+                                                x_desc,
+                                                d_dy_));
+    */
 }
 
-size_t Conv::constructSolver()
+void Conv::updateWeights()
 {
-    size_t total_space = 0;
-
-    // solver part
-    const SolverSetting solver_setting = network_->getSolverSetting();
-    const SolverType solver_type       = solver_setting.type;
-    if (solver_type == ADAM)
-    {
-        size_t space = sizeof(float) * kernel_.channels;
-        checkCudaErrors(cudaMalloc(&adam.d_m_b, space));
-        checkCudaErrors(cudaMemset(adam.d_m_b, 0, space));
-        checkCudaErrors(cudaMalloc(&adam.d_v_b, space));
-        checkCudaErrors(cudaMemset(adam.d_v_b, 0, space));
-        checkCudaErrors(cudaMalloc(&adam.tmp_b, space));
-
-        total_space += space * 5;
-    }
-    else if (solver_type == mSGD)
-    {
-        size_t space = sizeof(float) * kernel_.channels;
-        checkCudaErrors(cudaMalloc(&msgd.d_v_b, space));
-
-        total_space += space;
-    }
-
-    // initialize parameters
-    // TODO(Peter Han): move to other dedicate method
-    if (solver_type != SolverType::InfOnly)
-    {
-        size_t input_channel = upstream_.getOutputDim().z;
-        size_t len =
-            kernel_.height * kernel_.width * kernel_.output * input_channel;
-        std::vector<float> h_filter(len);
-        std::vector<float> h_bias(len);
-
-        std::random_device rd;
-        std::mt19937 gen(rd());
-        float w = 1.0f / (kernel_.height * kernel_.width * input_channel);
-        std::uniform_real_distribution<> d(-w, w);
-        for (auto&& iter : h_filter)
-            iter = static_cast<float>(d(gen));
-        for (auto&& iter : h_bias)
-            iter = 0.0f;
-        checkCudaErrors(cudaMemcpy(filter_,
-                                   h_filter.data(),
-                                   sizeof(float) * h_filter.size(),
-                                   cudaMemcpyHostToDevice));
-        checkCudaErrors(cudaMemcpy(bias_,
-                                   h_bias.data(),
-                                   sizeof(float) * h_bias.size(),
-                                   cudaMemcpyHostToDevice));
-    }
-
-    return total_space;
 }
 
-void Conv::destroySolver()
+cudnnTensorDescriptor_t Conv::getYDescriptor() const
 {
-    checkCudaErrors(cudaFree(adam.d_m_b));
-    checkCudaErrors(cudaFree(adam.d_v_b));
-    checkCudaErrors(cudaFree(adam.tmp_b));
-    checkCudaErrors(cudaFree(msgd.d_v_b));
+    return y_desc_;
 }
 
-// TODO(Peter Han): terrible function name, should refact
-size_t Conv::dealWithWorkspace()
+float* Conv::getY() const
 {
-    int output_batch_size;
-    int output_channel;
-    int output_height;
-    int output_width;
-    checkCUDNN(cudnnGetConvolution2dForwardOutputDim(
-        desc, src->tensor, filterDesc, &output_height, &output_width));
-
-    size_t image_bytes = output_batch_size * output_channels * output_height *
-                         output_width * sizeof(float);
-
-    assert(network_->getBatchSize() == output_batch_size);
-    assert(output_channel == kernel_.channel);
-
-    out_height = oheight;
-    out_width  = owidth;
-
-    // WTF!
-    define_tensor(nn);
-
-    bool with_limit = true;
-    cudnnConvolutionFwdPreference_t fwdPref;
-    cudnnConvolutionBwdDataPreference_t bwdDPref;
-    cudnnConvolutionBwdFilterPreference_t bwdFPref;
-    size_t memory_limit;
-    if (with_limit)
-    {
-        memory_limit = 1073741824 * 1.5;
-        fwdPref      = CUDNN_CONVOLUTION_FWD_SPECIFY_WORKSPACE_LIMIT;
-        bwdDPref     = CUDNN_CONVOLUTION_BWD_DATA_SPECIFY_WORKSPACE_LIMIT;
-        bwdFPref     = CUDNN_CONVOLUTION_BWD_FILTER_SPECIFY_WORKSPACE_LIMIT;
-    }
-    else
-    {
-        memory_limit = 0;
-        fwdPref      = CUDNN_CONVOLUTION_FWD_PREFER_FASTEST;
-        bwdDPref     = CUDNN_CONVOLUTION_BWD_DATA_PREFER_FASTEST;
-        bwdFPref     = CUDNN_CONVOLUTION_BWD_FILTER_PREFER_FASTEST;
-    }
-    checkCUDNN(cudnnGetConvolutionForwardAlgorithm(nn->cudnnHandle,
-                                                   src->tensor,
-                                                   filterDesc,
-                                                   desc,
-                                                   tensor,
-                                                   fwdPref,
-                                                   memory_limit,
-                                                   &fw_algo));
-    size_t workspace_bytes = 0;
-    checkCUDNN(cudnnGetConvolutionForwardWorkspaceSize(nn->cudnnHandle,
-                                                       src->tensor,
-                                                       filterDesc,
-                                                       desc,
-                                                       tensor,
-                                                       fw_algo,
-                                                       &workspace_bytes));
-    if (workspace_bytes > nn->m_workspaceSize)
-        nn->m_workspaceSize = workspace_bytes;
-    if (nn->update_type != ONLY_INFERENCE)
-    {
-        checkCUDNN(cudnnGetConvolutionBackwardFilterAlgorithm(nn->cudnnHandle,
-                                                              src->tensor,
-                                                              tensor,
-                                                              desc,
-                                                              filterDesc,
-                                                              bwdFPref,
-                                                              memory_limit,
-                                                              &bwF_algo));
-        checkCUDNN(
-            cudnnGetConvolutionBackwardFilterWorkspaceSize(nn->cudnnHandle,
-                                                           src->tensor,
-                                                           tensor,
-                                                           desc,
-                                                           filterDesc,
-                                                           bwF_algo,
-                                                           &workspace_bytes));
-        nn->m_workspaceSize = std::max(nn->m_workspaceSize, workspace_bytes);
-        checkCUDNN(cudnnGetConvolutionBackwardDataAlgorithm(nn->cudnnHandle,
-                                                            filterDesc,
-                                                            tensor,
-                                                            desc,
-                                                            src->tensor,
-                                                            bwdDPref,
-                                                            memory_limit,
-                                                            &bwD_algo));
-        checkCUDNN(
-            cudnnGetConvolutionBackwardDataWorkspaceSize(nn->cudnnHandle,
-                                                         filterDesc,
-                                                         tensor,
-                                                         desc,
-                                                         src->tensor,
-                                                         bwD_algo,
-                                                         &workspace_bytes));
-        nn->m_workspaceSize = std::max(nn->m_workspaceSize, workspace_bytes);
-    }
-}
-
-void Conv::setFwdPropagation()
-{
+    return d_y_;
 }
 
 }  // namespace layers

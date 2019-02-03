@@ -7,11 +7,21 @@ namespace nn
 {
 NetworkImpl::NetworkImpl(int batch_size,
                          const SolverSetting& solver_setting,
-                         const LossType loss_type)
+                         const LossType loss_type,
+                         bool inference_only)
     : batch_size_(batch_size)
     , solver_setting_(solver_setting)
     , loss_type_(loss_type)
+    , inference_only_(inference_only)
 {
+    checkCudaErrors(cublasCreate(&cublas_handle_));
+    checkCUDNN(cudnnCreate(&cudnn_handle_));
+}
+
+NetworkImpl::~NetworkImpl()
+{
+    checkCudaErrors(cublasDestroy(cublas_handle_));
+    checkCUDNN(cudnnDestroy(cudnn_handle_));
 }
 
 int NetworkImpl::getBatchSize() const
@@ -38,4 +48,45 @@ LossType NetworkImpl::getLossType() const
 {
     return loss_type_;
 }
+
+cudnnHandle_t NetworkImpl::getCudnnHandle() const
+{
+    return cudnn_handle_;
+}
+
+cublasHandle_t NetworkImpl::getCublasHandle() const
+{
+    return cublas_handle_;
+}
+
+const float* NetworkImpl::getAlpha() const
+{
+    return &alpha_;
+}
+
+const float* NetworkImpl::getBeta() const
+{
+    return &beta_;
+}
+
+size_t NetworkImpl::getWorkspaceSize() const
+{
+    return workspace_size_;
+}
+
+void NetworkImpl::setWorkspaceSize(size_t size) const
+{
+    workspace_size_ = size;
+}
+
+float* NetworkImpl::getWorkspace() const
+{
+    return d_workspace_;
+}
+
+bool NetworkImpl::getInferenceOnly() const
+{
+    return inference_only_;
+}
+
 }  // namespace nn

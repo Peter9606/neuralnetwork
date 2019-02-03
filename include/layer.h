@@ -13,14 +13,29 @@
 
 namespace nn
 {
-/** @class Layer
- * @brief Layer reprensent a common base layer of a typical neural network.
- *
- * A layer could have multiple upstream and downstream layers, but can only
- * produce only type of output tensor named tensor_.
- * Layer has  the functions to forward and backward propagation.
+using std::shared_ptr;
+using std::vector;
+using std::weak_ptr;
+
+/** @struct Dim
+ * A dimension for channel, height and width
  */
-class Layer
+struct Dim
+{
+    int c;
+    int h;
+    int w;
+};
+
+/** @class Layer
+ * @brief Interface class reprensent a common base layer of a typical neural
+ * network.
+ * Currently a layer could have at most one up layer and multiple down
+ * layers.
+ * Below figure illustrates what is upstream & downstream image:
+ *  -->...--> upstream --> current layer --> downstream -->...--> result
+ */
+class Layer : public std::enable_shared_from_this<Layer>
 {
 public:
     enum Type : int
@@ -38,120 +53,124 @@ public:
     /**
      * Layer constructor
      *
-     * @param[in] name          layer name
-     * @param[in] type          layer type
-     * @param[in] network       Network interface handle
-     * @param[in] upstreams     upstream layer vector
+     * @param[in] name      layer name
+     * @param[in] network   Network interface handle
+     * @param[in] up        upstream Layer handle
      */
-    Layer(const std::string& name,
-          Type type,
-          const NetworkConstPtr network,
-          const std::vector<std::shared_ptr<Layer const>>& upstreams);
+    explicit Layer(const std::string& name,
+                   const NetworkConstPtr& network,
+                   const shared_ptr<Layer const>& up);
 
     /**
      * Layer destructor
      */
-    virtual ~Layer();
+    virtual ~Layer() = 0;
 
     /**
-     * Get layer name
+     * load parameters from given data existing in host.
+     * do nothing in default implementation.
      *
-     * @return layer name
+     * @param[in] h_params a float vector contains current layer's parameters
      */
-    const std::string getName() const;
+    virtual void loadParameters(const shared_ptr<vector<float>>& h_params);
 
     /**
-     * Get layer type
+     * copy parameters from device to host
+     * do nothing in default implementation.
      *
-     * @return layer type
+     * @return a float vector
      */
-    Layer::Type getType() const;
+    virtual shared_ptr<vector<float>> saveParameters();
 
     /**
-     * Get output tensor's dimention in x, y and z
+     * prepare forward propagation
+     * do nothing in default implementation.
+     * concrete class should set various type descriptor, alloc memory on gpu
+     * Network implementation will collect all layers' returned size.
      *
-     * @return output tensor's dimention
+     * @return allocated memory size on GPU in bytes.
      */
-    dim3 getOutputTensorDim() const;
+    virtual size_t prepareFwdPropagation();
 
     /**
-     * Get output tensor pointer which is pointing to device memory
+     * prepare backward propagation
+     * do nothing in default implementation.
+     * concrete class should set various type descriptor, alloc memory on gpu
+     * Network implementation will collect all layers' returned size.
      *
-     * @return output tensor pointer
+     * @return allocated memory size on GPU in bytes.
      */
-    float* getOutputTensor() const;
+    virtual size_t prepareBwdPropagation();
 
     /**
-     * Get grident pointer of output tensor which points to device memeory
+     * run forward propagation
+     */
+    virtual void fwdPropagation() = 0;
+
+    /**
+     * run backward propgation
      *
-     * @return grident pointer
+     * @param[in] d_downstream_gradient downstream layer's output tensor
+     * gradient
+     * @return pointer to gradient on device w.r.t. current layer's output
      */
-    float* getOutputTensorGradient() const;
+    virtual void bwdPropagation() = 0;
 
     /**
-     * Get output tensor descriptor
+     * update weights
+     */
+    virtual void updateWeights();
+
+    /**
+     * get output Y tensor descriptor
      *
-     * @return get output tensor's descriptor
+     * @return output tensor descriptor
      */
-    cudnnTensorDescriptor_t getOutputTensorDesc() const;
+    virtual cudnnTensorDescriptor_t getYDescriptor() const = 0;
 
     /**
-     * Link upstream
-     */
-    virtual void linkTensor(std::shared_ptr<Layer const>& src);
-
-    /**
-     * Prepare forward propagation
-     * each layer should have its own implmentation
-     */
-    virtual void setFwdPropagation(){};
-
-    /**
-     * Forward propagation, each layer should have its own implementation
-     */
-    virtual void fwdPropagation(){};
-
-    /**
-     * Backward propagation, each layer should have its own implementation
-     */
-    virtual void bwdPropagation(){};
-
-    /**
-     * << operator to stringizing a Layer object
-     */
-    friend std::ostream& operator<<(std::ostream& os, const Layer& layer);
-
-private:
-    /**
-     * create output tensor and malloc memory on device, gradient as well if
-     * applicable
+     * get output tensor
      *
-     * @return total size of device memory in byte
+     * @return pointer to output tensor on device
      */
-    size_t constructOutputTensor();
+    virtual float* getY() const = 0;
 
     /**
-     * destroy output tensor and its allocated memory from device, gradient as
-     * well if applicable. It's safe to call this even no constructOutputTensor
-     * is called before.
+     * get output dimension
+     *
+     * @return dim of output tensor, in which x, y and z represents height,
+     * width and channel respectively
      */
-    void destroyOutputTensor();
+    virtual Dim getDim() const;
+
+    /**
+     * get graident
+     *
+     * @return gradient of current layer
+     */
+    virtual float* getGradient() const = 0;
+
+    /**
+     * append downstream layer
+     *
+     * @param[in] layer downstream layer
+     */
+    virtual void appendDownstream(const shared_ptr<Layer const>& layer) const;
 
 protected:
     const std::string name_;
-    const Layer::Type type_;
-    const NetworkConstPtr network_;
-    const std::vector<std::shared_ptr<Layer const>> upstreams_;
+    const weak_ptr<Network const> network_;
+    const weak_ptr<Layer const> up_;
+    mutable vector<weak_ptr<Layer const>> down_vector_;
 
-    cudnnTensorDescriptor_t output_tensor_desc_;
-    dim3 output_tensor_dim_;
-    float* output_tensor_          = nullptr;
-    float* output_tensor_gradient_ = nullptr;
+    int n_; /** output image number  */
+    int c_; /** output image channel */
+    int h_; /** output imgae height  */
+    int w_; /** output image width   */
 };
 
-using LayerPtr         = std::shared_ptr<Layer>;
-using LayerConstPtr    = std::shared_ptr<Layer const>;
-using LayerPtrVec      = std::vector<LayerPtr>;
-using LayerConstPtrVec = std::vector<LayerConstPtr>;
-
+using LayerPtr          = shared_ptr<Layer>;
+using LayerConstPtr     = shared_ptr<Layer const>;
+using LayerWeakPtr      = weak_ptr<Layer>;
+using LayerWeakConstPtr = weak_ptr<Layer const>;
 }  // namespace nn

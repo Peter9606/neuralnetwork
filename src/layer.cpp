@@ -1,110 +1,66 @@
+// self
 #include "error_check.h"
 #include "layer.h"
 
 namespace nn
 {
 Layer::Layer(const std::string& name,
-             Layer::Type type,
-             const NetworkConstPtr network,
-             const LayerConstPtrVec& upstreams)
+             const NetworkConstPtr& network,
+             const LayerConstPtr& up)
     : name_(name)
-    , type_(type)
     , network_(network)
-    , upstreams_(upstreams)
+    , up_(up)
+    , n_(network->getBatchSize())
 {
-}
-
-Layer::~Layer()
-{
-    destroyOutputTensor();
-}
-
-size_t Layer::constructOutputTensor()
-{
-    checkCUDNN(cudnnCreateTensorDescriptor(&output_tensor_desc_));
-    checkCUDNN(cudnnSetTensor4dDescriptor(output_tensor_desc_,
-                                          CUDNN_TENSOR_NCHW,
-                                          CUDNN_DATA_FLOAT,
-                                          network_->getBatchSize(),
-                                          output_tensor_dim_.x,
-                                          output_tensor_dim_.y,
-                                          output_tensor_dim_.z));
-
-    // size of current layer's tensor
-    size_t memory_size = sizeof(float) * network_->getBatchSize() *
-                         output_tensor_dim_.x * output_tensor_dim_.y *
-                         output_tensor_dim_.z;
-
-    // allocate memory for tensor on GPU
-    checkCudaErrors(cudaMalloc(&output_tensor_, memory_size));
-
-    // allocate memory for gradient on GPU if applicable
-    if (type_ != INPUT && !network_->isInferenceOnly())
+    if (up)
     {
-        checkCudaErrors(cudaMalloc(&output_tensor_gradient_, memory_size));
-        memory_size *= 2;
+        up->appendDownstream(shared_from_this());
     }
 
-    std::cout << this << " memory allocated " << memory_size << "MB"
-              << std::endl;
-    return memory_size;
+    /**
+     * A principle for create and set various types of descriptor and malloc
+     * memory on GPU:
+     * do it in prepareFwdPropagation and prepareBwdPropagation as long
+     * as possible.
+     *
+     * NOTE: descriptor handle and memory can be safely destroied even they are
+     * not created or allocated already.
+     */
 }
 
-void Layer::destroyOutputTensor()
+void Layer::loadParameters(const shared_ptr<vector<float>>& h_params)
 {
-    // cudaFree 0 at will
-    checkCudaErrors(cudaFree(output_tensor_));
-    output_tensor_ = nullptr;
-
-    checkCudaErrors(cudaFree(output_tensor_gradient_));
-    output_tensor_gradient_ = nullptr;
-
-    // it's safe to destory a null pointer
-    checkCUDNN(cudnnDestroyTensorDescriptor(output_tensor_desc_));
 }
 
-void Layer::linkTensor(LayerConstPtr& src)
+shared_ptr<vector<float>> Layer::saveParameters()
 {
-    assert(type_ == RELU);
-    output_tensor_          = src->getOutputTensor();
-    output_tensor_dim_      = src->getOutputTensorDim();
-    output_tensor_gradient_ = src->getOutputTensorGradient();
+    return nullptr;
 }
 
-const std::string Layer::getName() const
+size_t Layer::prepareFwdPropagation()
 {
-    return name_;
+    return 0;
 }
 
-Layer::Type Layer::getType() const
+size_t Layer::prepareBwdPropagation()
 {
-    return type_;
+    return 0;
 }
 
-dim3 Layer::getOutputTensorDim() const
+void Layer::updateWeights()
 {
-    return output_tensor_dim_;
 }
 
-float* Layer::getOutputTensor() const
+void Layer::appendDownstream(const shared_ptr<Layer const>& layer) const
 {
-    return output_tensor_;
+    LayerWeakConstPtr wp = layer;
+    down_vector_.push_back(wp);
 }
 
-float* Layer::getOutputTensorGradient() const
+Dim Layer::getDim() const
 {
-    return output_tensor_gradient_;
-}
-
-cudnnTensorDescriptor_t Layer::getOutputTensorDesc() const
-{
-    return output_tensor_desc_;
-}
-
-std::ostream& operator<<(std::ostream& os, const Layer& layer)
-{
-    os << "Layer[" << layer.name_ << "]";
-    return os;
+    Dim d = {c_, h_, w_};
+    return d;
 }
 
 }  // namespace nn
