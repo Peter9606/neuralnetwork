@@ -7,12 +7,10 @@ namespace nn
 {
 NetworkImpl::NetworkImpl(int batch_size,
                          const SolverSetting& solver_setting,
-                         const LossType loss_type,
-                         bool inference_only)
+                         const LossType loss_type)
     : batch_size_(batch_size)
     , solver_setting_(solver_setting)
     , loss_type_(loss_type)
-    , inference_only_(inference_only)
 {
     checkCudaErrors(cublasCreate(&cublas_handle_));
     checkCUDNN(cudnnCreate(&cudnn_handle_));
@@ -82,11 +80,6 @@ void NetworkImpl::setWorkspaceSize(size_t size) const
 float* NetworkImpl::getWorkspace() const
 {
     return d_workspace_;
-}
-
-bool NetworkImpl::getInferenceOnly() const
-{
-    return inference_only_;
 }
 
 }  // namespace nn

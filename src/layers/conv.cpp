@@ -143,9 +143,9 @@ size_t Conv::prepareFwdPropagation()
     // alloc memory
     const size_t tensor_size = sizeof(float) * n_ * c_ * h_ * w_;
     const size_t bias_size   = sizeof(float) * c_;
-    const size_t filter_size =
-        sizeof(float) * kernel_.height * kernel_.width * kernel_.channel;
-    const size_t total = tensor_size + bias_size + filter_size;
+    const int input_channel  = up->getDim().c;
+    const size_t filter_size = sizeof(float) * kernel_.height * kernel_.width *
+                               input_channel * kernel_.channel;
 
     checkCudaErrors(cudaMalloc(&d_y_, tensor_size));
     checkCudaErrors(cudaMalloc(&d_bias_, bias_size));
@@ -172,7 +172,7 @@ size_t Conv::prepareFwdPropagation()
     // notify network to update workspace size
     nn->updateWorkspaceSize(workspace_size);
 
-    return total;
+    return tensor_size + bias_size + filter_size;
 }
 
 size_t Conv::prepareBwdPropagation()
@@ -186,8 +186,9 @@ size_t Conv::prepareBwdPropagation()
     cudnnTensorDescriptor_t x_desc = up->getDescriptor();
     const size_t tensor_size       = sizeof(float) * n_ * c_ * h_ * w_;
     const size_t bias_size         = sizeof(float) * c_;
-    const size_t filter_size =
-        sizeof(float) * kernel_.height * kernel_.width * kernel_.channel;
+    const int input_channel        = up->getDim().c;
+    const size_t filter_size = sizeof(float) * kernel_.height * kernel_.width *
+                               input_channel * kernel_.channel;
     const size_t total = tensor_size + bias_size + filter_size;
 
     checkCudaErrors(cudaMalloc(&d_dy_, tensor_size));
@@ -231,7 +232,7 @@ size_t Conv::prepareBwdPropagation()
                                                             &workspace_size));
     nn->updateWorkspaceSize(workspace_size);
 
-    return total;
+    return tensor_size + bias_size + filter_size;
 }
 
 void Conv::fwdPropagation()
@@ -320,6 +321,34 @@ void Conv::bwdPropagation()
 
 void Conv::updateWeights()
 {
+    NetworkConstPtr nn = network_.lock();
+    assert(("Network is expired", nn));
+    LayerConstPtr up = up_.lock();
+    assert(("Upstream is expired", up));
+
+    const SolverSetting setting = nn->getSolverSetting();
+    const float learning_rate   = setting.learning_rate;
+    const size_t bias_size      = sizeof(float) * c_;
+    const int input_channel     = up->getDim().c;
+    const size_t filter_size = sizeof(float) * kernel_.height * kernel_.width *
+                               input_channel * kernel_.channel;
+
+    cublasHandle_t cublas_handle = nn->getCublasHandle();
+
+    checkCudaErrors(cublasSaxpy(cublas_handle,
+                                static_cast<int>(filter_size),
+                                &learning_rate,
+                                d_dfilter_,
+                                1,
+                                d_filter_,
+                                1));
+    checkCudaErrors(cublasSaxpy(cublas_handle,
+                                static_cast<int>(bias_size),
+                                &learning_rate,
+                                d_dbias_,
+                                1,
+                                d_bias_,
+                                1));
 }
 
 cudnnTensorDescriptor_t Conv::getDescriptor() const

@@ -47,6 +47,7 @@ enum SolverType
  */
 struct SolverSetting
 {
+    float learning_rate;
     SolverType type;
     union
     {
@@ -154,13 +155,6 @@ public:
      * @return pointer to workspace in device
      */
     virtual float* getWorkspace() const = 0;
-
-    /**
-     * get if network only used for inference
-     *
-     * @return  true if inference only, false otherwise
-     */
-    virtual bool getInferenceOnly() const = 0;
 };
 
 using NetworkPtr          = shared_ptr<Network>;

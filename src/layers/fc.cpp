@@ -222,6 +222,31 @@ void FC::bwdPropagation()
 
 void FC::updateWeights()
 {
+    NetworkConstPtr nn = network_.lock();
+    assert(("Network is expired", nn));
+    LayerConstPtr up = up_.lock();
+    assert(("Up stream is expired", up));
+
+    cublasHandle_t cublas_handle = nn->getCublasHandle();
+    const SolverSetting setting  = nn->getSolverSetting();
+    const float learning_rate    = setting.learning_rate;
+    const size_t weight_size = sizeof(float) * input_length_ * output_length_;
+    const size_t bias_size   = sizeof(float) * output_length_;
+
+    checkCudaErrors(cublasSaxpy(cublas_handle,
+                                static_cast<int>(weight_size),
+                                &learning_rate,
+                                d_dweight_,
+                                1,
+                                d_weight_,
+                                1));
+    checkCudaErrors(cublasSaxpy(cublas_handle,
+                                static_cast<int>(bias_size),
+                                &learning_rate,
+                                d_dbias_,
+                                1,
+                                d_bias_,
+                                1));
 }
 
 cudnnTensorDescriptor_t FC::getDescriptor() const

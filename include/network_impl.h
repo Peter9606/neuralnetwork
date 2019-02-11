@@ -14,12 +14,10 @@ public:
      * @param[in] batch_size  batch size
      * @param[in] solver_setting solver setting
      * @param[in] loss_type loss type
-     * @param[in] inference_only if network is dedicated for inference only
      */
     NetworkImpl(int batch_size,
                 const SolverSetting& solver_setting,
-                LossType loss_type,
-                bool inference_only = false);
+                LossType loss_type);
 
     /**
      * destructor
@@ -110,20 +108,12 @@ public:
      */
     virtual float* getWorkspace() const;
 
-    /**
-     * get if network only used for inference
-     *
-     * @return  true if inference only, false otherwise
-     */
-    virtual bool getInferenceOnly() const;
-
 private:
     float alpha_ = 1.0f;
     float beta_  = 0.0f;
     const int batch_size_;
     const SolverSetting solver_setting_;
     const LossType loss_type_;
-    const bool inference_only_;
     mutable long memory_needed_ = 0;
 
     cudnnHandle_t cudnn_handle_;
