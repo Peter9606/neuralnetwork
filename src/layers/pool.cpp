@@ -60,7 +60,7 @@ size_t Pool::prepareFwdPropagation()
         int h;
         int w;
         checkCUDNN(cudnnGetPooling2dForwardOutputDim(
-            pool_desc_, up->getYDescriptor(), &n, &c, &h, &w));
+            pool_desc_, up->getDescriptor(), &n, &c, &h, &w));
 
         checkCUDNN(cudnnCreateTensorDescriptor(&y_desc_));
         checkCUDNN(cudnnSetTensor4dDescriptor(
@@ -94,8 +94,8 @@ void Pool::fwdPropagation()
     cudnnHandle_t cudnn_handle     = nn->getCudnnHandle();
     const float* alpha             = nn->getAlpha();
     const float* beta              = nn->getBeta();
-    cudnnTensorDescriptor_t x_desc = up->getYDescriptor();
-    float* d_x                     = up->getY();
+    cudnnTensorDescriptor_t x_desc = up->getDescriptor();
+    float* d_x                     = up->getTensor();
 
     checkCUDNN(cudnnPoolingForward(
         cudnn_handle, pool_desc_, alpha, x_desc, d_x, beta, y_desc_, d_y_));
@@ -115,11 +115,11 @@ void Pool::bwdPropagation()
         cudnnHandle_t cudnn_handle        = nn->getCudnnHandle();
         const float* alpha                = nn->getAlpha();
         const float* beta                 = nn->getBeta();
-        cudnnTensorDescriptor_t down_desc = down->getYDescriptor();
-        float* d_down_tensor              = down->getY();
+        cudnnTensorDescriptor_t down_desc = down->getDescriptor();
+        float* d_down_tensor              = down->getTensor();
         float* d_down_gradient            = down->getGradient();
-        cudnnTensorDescriptor_t up_desc   = up->getYDescriptor();
-        float* d_up_tensor                = up->getY();
+        cudnnTensorDescriptor_t up_desc   = up->getDescriptor();
+        float* d_up_tensor                = up->getTensor();
 
         checkCUDNN(cudnnPoolingBackward(cudnn_handle,
                                         pool_desc_,
@@ -136,12 +136,12 @@ void Pool::bwdPropagation()
     ***/
 }
 
-cudnnTensorDescriptor_t Pool::getYDescriptor() const
+cudnnTensorDescriptor_t Pool::getDescriptor() const
 {
     return y_desc_;
 }
 
-float* Pool::getY() const
+float* Pool::getTensor() const
 {
     return d_y_;
 }

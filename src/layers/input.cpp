@@ -44,12 +44,12 @@ void Input::fwdPropagation()
     // TODO(Peter Han)
 }
 
-cudnnTensorDescriptor_t Input::getYDescriptor() const
+cudnnTensorDescriptor_t Input::getDescriptor() const
 {
     return y_desc_;
 }
 
-float* Input::getY() const
+float* Input::getTensor() const
 {
     return d_y_;
 }

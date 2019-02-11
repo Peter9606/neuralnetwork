@@ -122,7 +122,7 @@ void FC::fwdPropagation()
     cublasHandle_t cublas_handle = nn->getCublasHandle();
     const float* alpha           = nn->getAlpha();
     const float* beta            = nn->getBeta();
-    float* d_x                   = up->getY();
+    float* d_x                   = up->getTensor();
 
     // d_y_(output_length_ * batch_size) = d_weight_.T (output_length_ *
     // input_length_) * d_src_tensor (input_length_ * batch_size)
@@ -226,12 +226,12 @@ void FC::updateWeights()
 {
 }
 
-cudnnTensorDescriptor_t FC::getYDescriptor() const
+cudnnTensorDescriptor_t FC::getDescriptor() const
 {
     return y_desc_;
 }
 
-float* FC::getY() const
+float* FC::getTensor() const
 {
     return d_y_;
 }

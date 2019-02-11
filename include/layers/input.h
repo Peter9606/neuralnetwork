@@ -50,14 +50,14 @@ public:
      *
      * @return output tensor descriptor
      */
-    cudnnTensorDescriptor_t getYDescriptor() const;
+    cudnnTensorDescriptor_t getDescriptor() const;
 
     /**
      * get output tensor
      *
      * @return pointer to output tensor on device
      */
-    float* getY() const;
+    float* getTensor() const;
 
     /**
      * get output dim

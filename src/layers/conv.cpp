@@ -111,7 +111,7 @@ size_t Conv::prepareFwdPropagation()
     checkCUDNN(cudnnCreateTensorDescriptor(&y_desc_));
 
     // compute output dimension and set descriptors
-    cudnnTensorDescriptor_t x_desc = up->getYDescriptor();
+    cudnnTensorDescriptor_t x_desc = up->getDescriptor();
     int n;
     checkCUDNN(cudnnGetConvolution2dForwardOutputDim(
         conv_desc_, x_desc, filter_desc_, &n, &c_, &h_, &w_));
@@ -154,7 +154,7 @@ size_t Conv::prepareFwdPropagation()
     size_t workspace_size = 0;
     checkCUDNN(cudnnGetConvolutionForwardAlgorithm(
         nn->getCudnnHandle(),
-        up->getYDescriptor(),
+        up->getDescriptor(),
         filter_desc_,
         conv_desc_,
         y_desc_,
@@ -162,7 +162,7 @@ size_t Conv::prepareFwdPropagation()
         0,
         &fwd_algo_));
     checkCUDNN(cudnnGetConvolutionForwardWorkspaceSize(nn->getCudnnHandle(),
-                                                       up->getYDescriptor(),
+                                                       up->getDescriptor(),
                                                        filter_desc_,
                                                        conv_desc_,
                                                        y_desc_,
@@ -182,7 +182,7 @@ size_t Conv::prepareBwdPropagation()
 
     size_t workspace_size          = 0;
     cudnnHandle_t cudnn_handle     = nn->getCudnnHandle();
-    cudnnTensorDescriptor_t x_desc = up->getYDescriptor();
+    cudnnTensorDescriptor_t x_desc = up->getDescriptor();
     const size_t tensor_size       = sizeof(float) * n_ * c_ * h_ * w_;
     const size_t bias_size         = sizeof(float) * c_;
     const size_t filter_size =
@@ -244,8 +244,8 @@ void Conv::fwdPropagation()
     size_t workspace_size          = nn->getWorkspaceSize();
     const float* alpha             = nn->getAlpha();
     const float* beta              = nn->getBeta();
-    cudnnTensorDescriptor_t x_desc = up->getYDescriptor();
-    float* d_x                     = up->getY();
+    cudnnTensorDescriptor_t x_desc = up->getDescriptor();
+    float* d_x                     = up->getTensor();
 
     checkCUDNN(cudnnConvolutionForward(cudnn_handle,
                                        alpha,
@@ -282,8 +282,8 @@ void Conv::bwdPropagation()
         size_t workspace_size          = nn->getWorkspaceSize();
         const float* alpha             = nn->getAlpha();
         const float* beta              = nn->getBeta();
-        cudnnTensorDescriptor_t x_desc = up->getYDescriptor();
-        float* d_x                     = up->getY();
+        cudnnTensorDescriptor_t x_desc = up->getDescriptor();
+        float* d_x                     = up->getTensor();
         float* d_downstream_gradient   = down->getGradient();
 
         checkCUDNN(cudnnConvolutionBackwardBias(cudnnHandle,
@@ -328,12 +328,12 @@ void Conv::updateWeights()
 {
 }
 
-cudnnTensorDescriptor_t Conv::getYDescriptor() const
+cudnnTensorDescriptor_t Conv::getDescriptor() const
 {
     return y_desc_;
 }
 
-float* Conv::getY() const
+float* Conv::getTensor() const
 {
     return d_y_;
 }

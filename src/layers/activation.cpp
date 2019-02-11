@@ -74,8 +74,8 @@ size_t Activation::prepareFwdPropagation()
     }
     else
     {
-        y_desc_ = up->getYDescriptor();
-        d_y_    = up->getY();
+        y_desc_ = up->getDescriptor();
+        d_y_    = up->getTensor();
     }
 
     return total;
@@ -109,8 +109,8 @@ void Activation::fwdPropagation()
     cudnnHandle_t cudnn_handle     = nn->getCudnnHandle();
     const float* alpha             = nn->getAlpha();
     const float* beta              = nn->getBeta();
-    cudnnTensorDescriptor_t x_desc = up->getYDescriptor();
-    float* d_x                     = up->getY();
+    cudnnTensorDescriptor_t x_desc = up->getDescriptor();
+    float* d_x                     = up->getTensor();
 
     checkCUDNN(cudnnActivationForward(cudnn_handle,
                                       activation_desc_,
@@ -133,8 +133,8 @@ void Activation::bwdPropagation()
         cudnnHandle_t cudnn_handle     = nn->getCudnnHandle();
         const float* alpha             = nn->getAlpha();
         const float* beta              = nn->getBeta();
-        cudnnTensorDescriptor_t x_desc = down->getYDescriptor();
-        float* d_x                     = down->getY();
+        cudnnTensorDescriptor_t x_desc = down->getDescriptor();
+        float* d_x                     = down->getTensor();
         float* d_dx                    = down->getGradient();
 
         checkCUDNN(cudnnActivationBackward(cudnn_handle,
@@ -156,12 +156,12 @@ void Activation::updateWeights()
 {
 }
 
-cudnnTensorDescriptor_t Activation::getYDescriptor() const
+cudnnTensorDescriptor_t Activation::getDescriptor() const
 {
     return y_desc_;
 }
 
-float* Activation::getY() const
+float* Activation::getTensor() const
 {
     return d_y_;
 }

@@ -55,8 +55,8 @@ size_t Softmax::prepareFwdPropagation()
     {
         LayerConstPtr up = up_.lock();
         assert(("Upstream is expired", up));
-        y_desc_ = up->getYDescriptor();
-        d_y_    = up->getY();
+        y_desc_ = up->getDescriptor();
+        d_y_    = up->getTensor();
         d_dy_   = up->getGradient();
     }
     return total;
@@ -84,8 +84,8 @@ void Softmax::fwdPropagation()
     cudnnHandle_t cudnn_handle     = nn->getCudnnHandle();
     const float* alpha             = nn->getAlpha();
     const float* beta              = nn->getBeta();
-    cudnnTensorDescriptor_t x_desc = up->getYDescriptor();
-    float* d_x                     = up->getY();
+    cudnnTensorDescriptor_t x_desc = up->getDescriptor();
+    float* d_x                     = up->getTensor();
 
     checkCUDNN(cudnnSoftmaxForward(cudnn_handle,
                                    CUDNN_SOFTMAX_ACCURATE,
@@ -125,12 +125,12 @@ void Softmax::updateWeights()
 {
 }
 
-cudnnTensorDescriptor_t Softmax::getYDescriptor() const
+cudnnTensorDescriptor_t Softmax::getDescriptor() const
 {
     return y_desc_;
 }
 
-float* Softmax::getY() const
+float* Softmax::getTensor() const
 {
     return d_y_;
 }

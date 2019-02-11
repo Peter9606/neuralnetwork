@@ -33,7 +33,7 @@ struct Dim
  * Currently a layer could have at most one up layer and multiple down
  * layers.
  * Below figure illustrates what is upstream & downstream image:
- *  -->...--> upstream --> current layer --> downstream -->...--> result
+ * image...--> upstream --> current layer --> downstream -->...result
  */
 class Layer : public std::enable_shared_from_this<Layer>
 {
@@ -78,7 +78,7 @@ public:
      * copy parameters from device to host
      * do nothing in default implementation.
      *
-     * @return a float vector
+     * @return float vector which contains current layer's parameters
      */
     virtual shared_ptr<vector<float>> saveParameters();
 
@@ -118,22 +118,23 @@ public:
 
     /**
      * update weights
+     * do nothing in default implmentation.
      */
     virtual void updateWeights();
 
     /**
-     * get output Y tensor descriptor
+     * get output tensor descriptor
      *
      * @return output tensor descriptor
      */
-    virtual cudnnTensorDescriptor_t getYDescriptor() const = 0;
+    virtual cudnnTensorDescriptor_t getDescriptor() const = 0;
 
     /**
      * get output tensor
      *
      * @return pointer to output tensor on device
      */
-    virtual float* getY() const = 0;
+    virtual float* getTensor() const = 0;
 
     /**
      * get output dimension
@@ -144,7 +145,7 @@ public:
     virtual Dim getDim() const;
 
     /**
-     * get graident
+     * get graident w.r.t current layer's output
      *
      * @return gradient of current layer
      */
