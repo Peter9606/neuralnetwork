@@ -145,24 +145,24 @@ public:
     virtual Dim getDim() const;
 
     /**
-     * get graident w.r.t current layer's output
+     * @brief get graident w.r.t current layer's output
+     *
+     * The flow of backward propagation:
+     *   1. downstream layer acquires upstream's gradient pointer which has
+     *      already been allocated with proper device memory
+     *   2. downstream caculates the gradient w.r.t input
+     *
+     * NOTE: if a layer doesn't need its gradient w.r.t to output, then just
+     * return nullptr, which is also the default implementation's behavior
      *
      * @return gradient of current layer
      */
-    virtual float* getGradient() const = 0;
-
-    /**
-     * append downstream layer
-     *
-     * @param[in] layer downstream layer
-     */
-    virtual void appendDownstream(const shared_ptr<Layer const>& layer) const;
+    virtual float* getGradient() const;
 
 protected:
     const std::string name_;
     const weak_ptr<Network const> network_;
     const weak_ptr<Layer const> up_;
-    mutable vector<weak_ptr<Layer const>> down_vector_;
 
     int n_; /** output image number  */
     int c_; /** output image channel */

@@ -59,13 +59,6 @@ public:
      */
     float* getTensor() const;
 
-    /**
-     * get output dim
-     *
-     * @return dim of output tensor
-     */
-    Dim getDim() const;
-
 private:
     cudnnTensorDescriptor_t y_desc_;
 

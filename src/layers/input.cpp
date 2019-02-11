@@ -26,9 +26,9 @@ Input::~Input()
 
 size_t Input::prepareFwdPropagation()
 {
+    const size_t size       = sizeof(float) * n_ * c_ * h_ * w_;
     NetworkConstPtr network = network_.lock();
     assert(("Network is expired", network));
-    const size_t size = sizeof(float) * n_ * c_ * h_ * w_;
 
     checkCUDNN(cudnnCreateTensorDescriptor(&y_desc_));
     checkCUDNN(cudnnSetTensor4dDescriptor(
@@ -41,7 +41,7 @@ size_t Input::prepareFwdPropagation()
 
 void Input::fwdPropagation()
 {
-    // TODO(Peter Han)
+    // do nothing here.
 }
 
 cudnnTensorDescriptor_t Input::getDescriptor() const
@@ -52,12 +52,6 @@ cudnnTensorDescriptor_t Input::getDescriptor() const
 float* Input::getTensor() const
 {
     return d_y_;
-}
-
-Dim Input::getDim() const
-{
-    Dim d = {c_, h_, w_};
-    return d;
 }
 
 }  // namespace layers

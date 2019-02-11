@@ -96,6 +96,7 @@ size_t Activation::prepareBwdPropagation()
     {
         d_dy_ = up->getGradient();
     }
+
     return total;
 }
 
@@ -129,27 +130,29 @@ void Activation::bwdPropagation()
     LayerConstPtr up = up_.lock();
     assert(("Upstream is expired", up));
 
-    /***
-        cudnnHandle_t cudnn_handle     = nn->getCudnnHandle();
-        const float* alpha             = nn->getAlpha();
-        const float* beta              = nn->getBeta();
-        cudnnTensorDescriptor_t x_desc = down->getDescriptor();
-        float* d_x                     = down->getTensor();
-        float* d_dx                    = down->getGradient();
+    cudnnHandle_t cudnn_handle     = nn->getCudnnHandle();
+    const float* alpha             = nn->getAlpha();
+    const float* beta              = nn->getBeta();
+    cudnnTensorDescriptor_t x_desc = up->getDescriptor();
+    float* d_x                     = up->getTensor();
+    float* d_dx                    = up->getGradient();
 
-        checkCUDNN(cudnnActivationBackward(cudnn_handle,
-                                           activation_desc_,
-                                           alpha,
-                                           y_desc_,
-                                           d_y_,
-                                           y_desc_,
-                                           d_dy_,
-                                           x_desc,
-                                           d_x,
-                                           beta,
-                                           x_desc,
-                                           d_dx));
-    ***/
+    if (!d_dx)
+    {
+        return;
+    }
+    checkCUDNN(cudnnActivationBackward(cudnn_handle,
+                                       activation_desc_,
+                                       alpha,
+                                       y_desc_,
+                                       d_y_,
+                                       y_desc_,
+                                       d_dy_,
+                                       x_desc,
+                                       d_x,
+                                       beta,
+                                       x_desc,
+                                       d_dx));
 }
 
 void Activation::updateWeights()

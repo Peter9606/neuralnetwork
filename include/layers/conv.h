@@ -151,15 +151,13 @@ public:
     float* getTensor() const;
 
     /**
-     * get gradient
+     * get gradient w.r.t current layer's output
      *
      * @return gradient
      */
     float* getGradient() const;
 
-public:
-    // TODO(Peter Han): need pricesly access control over members,
-    // currently for debug convinient all set to public
+private:
     const Kernel kernel_;
     const Pad pad_;
     const Stride stride_;
@@ -175,10 +173,10 @@ public:
     cudnnConvolutionBwdDataAlgo_t bwd_data_algo_;
 
     float* d_filter_  = nullptr;
-    float* d_bias_    = nullptr;
-    float* d_y_       = nullptr;
     float* d_dfilter_ = nullptr;
+    float* d_bias_    = nullptr;
     float* d_dbias_   = nullptr;
+    float* d_y_       = nullptr;
     float* d_dy_      = nullptr;
 };
 

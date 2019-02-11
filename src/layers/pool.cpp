@@ -31,6 +31,18 @@ Pool::Pool(const std::string& name,
     , type_(type)
 
 {
+    checkCUDNN(cudnnCreatePoolingDescriptor(&pool_desc_));
+    checkCUDNN(cudnnSetPooling2dDescriptor(pool_desc_,
+                                           ::MODE[type_],
+                                           CUDNN_PROPAGATE_NAN,
+                                           window_.height,
+                                           window_.width,
+                                           pad_.vertical,
+                                           pad_.horizontal,
+                                           stride_.vertical,
+                                           stride_.horizontal));
+    checkCUDNN(cudnnGetPooling2dForwardOutputDim(
+        pool_desc_, up->getDescriptor(), &n_, &c_, &h_, &w_));
 }
 
 Pool::~Pool()
@@ -43,45 +55,22 @@ Pool::~Pool()
 
 size_t Pool::prepareFwdPropagation()
 {
-    checkCUDNN(cudnnCreatePoolingDescriptor(&pool_desc_));
+    checkCUDNN(cudnnCreateTensorDescriptor(&y_desc_));
+    checkCUDNN(cudnnSetTensor4dDescriptor(
+        y_desc_, CUDNN_TENSOR_NCHW, CUDNN_DATA_FLOAT, n_, c_, h_, w_));
 
-    checkCUDNN(cudnnSetPooling2dDescriptor(pool_desc_,
-                                           ::MODE[type_],
-                                           CUDNN_PROPAGATE_NAN,
-                                           window_.height,
-                                           window_.width,
-                                           pad_.vertical,
-                                           pad_.horizontal,
-                                           stride_.vertical,
-                                           stride_.horizontal));
-    /*
-        int n;
-        int c;
-        int h;
-        int w;
-        checkCUDNN(cudnnGetPooling2dForwardOutputDim(
-            pool_desc_, up->getDescriptor(), &n, &c, &h, &w));
+    const size_t output_size = n_ * c_ * h_ * w_;
+    checkCudaErrors(cudaMalloc(&d_y_, output_size));
 
-        checkCUDNN(cudnnCreateTensorDescriptor(&y_desc_));
-        checkCUDNN(cudnnSetTensor4dDescriptor(
-            y_desc_, CUDNN_TENSOR_NCHW, CUDNN_DATA_FLOAT, n, c, h, w));
-
-        const size_t len = n * c * h * w;
-        checkCudaErrors(cudaMalloc(&d_y_, len));
-        device_usage_ = len;
-
-        if (!network->isInferenceOnly())
-        {
-            const Dim input_dim = up->getDim();
-            const size_t flen   = n * input_dim.h * input_dim.w * input_dim.c;
-            checkCudaErrors(cudaMalloc(&d_dy_, flen));
-            device_usage_ += flen;
-        }
-    */
+    return output_size;
 }
 
 size_t Pool::prepareBwdPropagation()
 {
+    const size_t output_size = n_ * c_ * h_ * w_;
+    checkCudaErrors(cudaMalloc(&d_dy_, output_size));
+
+    return output_size;
 }
 
 void Pool::fwdPropagation()
@@ -103,37 +92,34 @@ void Pool::fwdPropagation()
 
 void Pool::bwdPropagation()
 {
-    /** No need down_
+    NetworkConstPtr nn = network_.lock();
+    assert(("Network is expired", nn));
+    LayerConstPtr up = up_.lock();
+    assert(("Upstream is expired", up));
 
-        NetworkConstPtr nn = network_.lock();
-        assert(("Network is expired", nn));
-        LayerConstPtr up = up_.lock();
-        assert(("Upstream is expired", up));
-        LayerConstPtr down = down_.lock();
-        assert(("Downstream is expired", down));
+    cudnnHandle_t cudnn_handle     = nn->getCudnnHandle();
+    const float* alpha             = nn->getAlpha();
+    const float* beta              = nn->getBeta();
+    cudnnTensorDescriptor_t x_desc = up->getDescriptor();
+    float* d_x                     = up->getTensor();
+    float* d_dx                    = up->getGradient();
 
-        cudnnHandle_t cudnn_handle        = nn->getCudnnHandle();
-        const float* alpha                = nn->getAlpha();
-        const float* beta                 = nn->getBeta();
-        cudnnTensorDescriptor_t down_desc = down->getDescriptor();
-        float* d_down_tensor              = down->getTensor();
-        float* d_down_gradient            = down->getGradient();
-        cudnnTensorDescriptor_t up_desc   = up->getDescriptor();
-        float* d_up_tensor                = up->getTensor();
-
-        checkCUDNN(cudnnPoolingBackward(cudnn_handle,
-                                        pool_desc_,
-                                        alpha,
-                                        y_desc_,
-                                        d_y_,
-                                        y_desc_,
-                                        d_down_gradient,
-                                        up_desc,
-                                        d_up_tensor,
-                                        beta,
-                                        up_desc,
-                                        d_dy_));
-    ***/
+    if (!d_dx)
+    {
+        return;
+    }
+    checkCUDNN(cudnnPoolingBackward(cudnn_handle,
+                                    pool_desc_,
+                                    alpha,
+                                    y_desc_,
+                                    d_y_,
+                                    y_desc_,
+                                    d_dy_,
+                                    x_desc,
+                                    d_x,
+                                    beta,
+                                    x_desc,
+                                    d_dx));
 }
 
 cudnnTensorDescriptor_t Pool::getDescriptor() const
@@ -144,6 +130,11 @@ cudnnTensorDescriptor_t Pool::getDescriptor() const
 float* Pool::getTensor() const
 {
     return d_y_;
+}
+
+float* Pool::getGradient() const
+{
+    return d_dy_;
 }
 }  // namespace layers
 }  // namespace nn

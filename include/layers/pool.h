@@ -85,14 +85,9 @@ public:
     float* getTensor() const;
 
     /**
-     * get output dimension
-     */
-    Dim getDim() const;
-
-    /**
-     * get gradient, for Input layer always return nullptr
+     * get gradient w.r.t. output
      *
-     * @return nullptr
+     * @return gradient
      */
     float* getGradient() const;
 

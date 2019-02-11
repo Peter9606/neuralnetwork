@@ -27,22 +27,23 @@ FC::~FC()
     checkCudaErrors(cudaFree(d_weight_));
     checkCudaErrors(cudaFree(d_bias_));
     checkCudaErrors(cudaFree(d_y_));
-    checkCudaErrors(cudaFree(d_one_vector_));
     checkCudaErrors(cudaFree(d_dbias_));
     checkCudaErrors(cudaFree(d_dweight_));
     checkCudaErrors(cudaFree(d_dy_));
+    checkCudaErrors(cudaFree(d_one_vector_));
 }
 
 size_t FC::prepareFwdPropagation()
 {
-    checkCUDNN(cudnnCreateTensorDescriptor(&y_desc_));
-    checkCUDNN(cudnnSetTensor4dDescriptor(
-        y_desc_, CUDNN_TENSOR_NCHW, CUDNN_DATA_FLOAT, n_, c_, h_, w_));
     const size_t tensor_size = sizeof(float) * n_ * c_ * h_ * w_;
     const size_t weight_size = sizeof(float) * input_length_ * output_length_;
     const size_t bias_size   = sizeof(float) * output_length_;
     const size_t vector_size = sizeof(float) * n_;
     const size_t total = tensor_size + weight_size + bias_size + vector_size;
+
+    checkCUDNN(cudnnCreateTensorDescriptor(&y_desc_));
+    checkCUDNN(cudnnSetTensor4dDescriptor(
+        y_desc_, CUDNN_TENSOR_NCHW, CUDNN_DATA_FLOAT, n_, c_, h_, w_));
 
     checkCudaErrors(cudaMalloc(&d_y_, tensor_size));
     checkCudaErrors(cudaMalloc(&d_weight_, weight_size));
@@ -124,24 +125,21 @@ void FC::fwdPropagation()
     const float* beta            = nn->getBeta();
     float* d_x                   = up->getTensor();
 
-    // d_y_(output_length_ * batch_size) = d_weight_.T (output_length_ *
-    // input_length_) * d_src_tensor (input_length_ * batch_size)
     checkCudaErrors(cublasSgemm(cublas_handle,
                                 CUBLAS_OP_T,
                                 CUBLAS_OP_N,
+                                input_length_,
                                 output_length_,
                                 n_,
-                                input_length_,
                                 alpha,
-                                d_weight_,
-                                input_length_,
                                 d_x,
                                 input_length_,
+                                d_weight_,
+                                output_length_,
                                 beta,
-                                d_y_,
-                                output_length_));
+                                d_dy_,
+                                input_length_));
 
-    // d_y_ += d_bias_ * d_one_vector_.T
     checkCudaErrors(cublasSgemm(cublas_handle,
                                 CUBLAS_OP_N,
                                 CUBLAS_OP_N,
@@ -160,66 +158,66 @@ void FC::fwdPropagation()
 
 void FC::bwdPropagation()
 {
-    /***
-        NetworkConstPtr nn = network_.lock();
-        assert(("Network is expired", nn));
-        LayerConstPtr up = up_.lock();
-        assert(("Up stream is expired", up));
-        LayerConstPtr down = down_.lock();
-        assert(("Down stream is expired", down));
+    NetworkConstPtr nn = network_.lock();
+    assert(("Network is expired", nn));
+    LayerConstPtr up = up_.lock();
+    assert(("Up stream is expired", up));
 
-        cublasHandle_t cublas_handle = nn->getCublasHandle();
-        const float* alpha           = nn->getAlpha();
-        const float* beta            = nn->getBeta();
-        float* d_x                   = up->getTensor();
-        float* d_downstream_gradient = down->getGradient();
+    cublasHandle_t cublas_handle = nn->getCublasHandle();
+    const float* alpha           = nn->getAlpha();
+    const float* beta            = nn->getBeta();
+    float* d_x                   = up->getTensor();
+    float* d_dx                  = up->getGradient();
 
-        // compute derivative w.r.t. weights
-        checkCudaErrors(cublasSgemm(cublas_handle,
-                                    CUBLAS_OP_N,
-                                    CUBLAS_OP_T,
-                                    input_length_,
-                                    output_length_,
-                                    n_,
-                                    alpha,
-                                    d_x,
-                                    input_length_,
-                                    d_downstream_gradient,
-                                    output_length_,
-                                    beta,
-                                    d_dweight_,
-                                    input_length_));
+    // compute derivative w.r.t. weights
+    checkCudaErrors(cublasSgemm(cublas_handle,
+                                CUBLAS_OP_N,
+                                CUBLAS_OP_T,
+                                input_length_,
+                                output_length_,
+                                n_,
+                                alpha,
+                                d_x,
+                                input_length_,
+                                d_dy_,
+                                output_length_,
+                                beta,
+                                d_dweight_,
+                                input_length_));
 
-        // compute derivative w.r.t. bias
-        checkCudaErrors(cublasSgemv(cublas_handle,
-                                    CUBLAS_OP_N,
-                                    output_length_,
-                                    n_,
-                                    alpha,
-                                    d_downstream_gradient,
-                                    output_length_,
-                                    d_one_vector_,
-                                    1,
-                                    beta,
-                                    d_dbias_,
-                                    1));
+    // compute derivative w.r.t. bias
+    checkCudaErrors(cublasSgemv(cublas_handle,
+                                CUBLAS_OP_N,
+                                output_length_,
+                                n_,
+                                alpha,
+                                d_dy_,
+                                output_length_,
+                                d_one_vector_,
+                                1,
+                                beta,
+                                d_dbias_,
+                                1));
 
-        // compute derivative w.r.t. data (for upstream layer)
-        checkCudaErrors(cublasSgemm(cublas_handle,
-                                    CUBLAS_OP_N,
-                                    CUBLAS_OP_N,
-                                    input_length_,
-                                    n_,
-                                    output_length_,
-                                    alpha,
-                                    d_weight_,
-                                    input_length_,
-                                    d_downstream_gradient,
-                                    output_length_,
-                                    beta,
-                                    d_dy_,
-                                    input_length_));
-    */
+    if (!d_dx)
+    {
+        return;
+    }
+    // compute derivative w.r.t. data
+    checkCudaErrors(cublasSgemm(cublas_handle,
+                                CUBLAS_OP_N,
+                                CUBLAS_OP_N,
+                                input_length_,
+                                n_,
+                                output_length_,
+                                alpha,
+                                d_weight_,
+                                input_length_,
+                                d_dy_,
+                                output_length_,
+                                beta,
+                                d_dx,
+                                input_length_));
 }
 
 void FC::updateWeights()
@@ -234,6 +232,11 @@ cudnnTensorDescriptor_t FC::getDescriptor() const
 float* FC::getTensor() const
 {
     return d_y_;
+}
+
+float* FC::getGradient() const
+{
+    return d_dy_;
 }
 }  // namespace layers
 }  // namespace nn

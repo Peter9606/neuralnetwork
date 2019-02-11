@@ -12,11 +12,6 @@ Layer::Layer(const std::string& name,
     , up_(up)
     , n_(network->getBatchSize())
 {
-    if (up)
-    {
-        up->appendDownstream(shared_from_this());
-    }
-
     /**
      * A principle for create and set various types of descriptor and malloc
      * memory on GPU:
@@ -51,16 +46,15 @@ void Layer::updateWeights()
 {
 }
 
-void Layer::appendDownstream(const shared_ptr<Layer const>& layer) const
-{
-    LayerWeakConstPtr wp = layer;
-    down_vector_.push_back(wp);
-}
-
 Dim Layer::getDim() const
 {
     Dim d = {c_, h_, w_};
     return d;
+}
+
+float* Layer::getGradient() const
+{
+    return nullptr;
 }
 
 }  // namespace nn

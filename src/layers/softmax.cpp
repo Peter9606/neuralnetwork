@@ -24,54 +24,54 @@ Softmax::Softmax(const std::string& name,
 
 Softmax::~Softmax()
 {
-    if (!in_place_)
+    if (in_place_)
     {
-        checkCUDNN(cudnnDestroyTensorDescriptor(y_desc_));
-        checkCudaErrors(cudaFree(d_y_));
-        checkCudaErrors(cudaFree(d_dy_));
+        return;
     }
+    checkCUDNN(cudnnDestroyTensorDescriptor(y_desc_));
+    checkCudaErrors(cudaFree(d_y_));
+    checkCudaErrors(cudaFree(d_dy_));
 }
 
 size_t Softmax::prepareFwdPropagation()
 {
-    size_t total = 0;
-    if (!in_place_)
-    {
-        const size_t size = n_ * c_ * h_ * w_;
-        checkCudaErrors(cudaMalloc(&d_y_, size));
+    checkCUDNN(cudnnCreateTensorDescriptor(&y_desc_));
+    checkCUDNN(cudnnSetTensor4dDescriptor(
+        y_desc_, CUDNN_TENSOR_NCHW, CUDNN_DATA_FLOAT, n_, c_, h_, w_));
 
-        checkCUDNN(cudnnCreateTensorDescriptor(&y_desc_));
-        checkCUDNN(cudnnSetTensor4dDescriptor(
-            y_desc_, CUDNN_TENSOR_NCHW, CUDNN_DATA_FLOAT, n_, c_, h_, w_));
-
-        NetworkConstPtr network = network_.lock();
-        assert(("Network is expired", network));
-        if (!network->isInferenceOnly())
-        {
-            checkCudaErrors(cudaMalloc(&d_dy_, size));
-        }
-    }
-    else
+    size_t output_size = 0;
+    if (in_place_)
     {
         LayerConstPtr up = up_.lock();
         assert(("Upstream is expired", up));
+
         y_desc_ = up->getDescriptor();
         d_y_    = up->getTensor();
-        d_dy_   = up->getGradient();
     }
-    return total;
+    else
+    {
+        output_size = n_ * c_ * h_ * w_;
+        checkCudaErrors(cudaMalloc(&d_y_, output_size));
+    }
+
+    return output_size;
 }
 
 size_t Softmax::prepareBwdPropagation()
 {
-    size_t total = 0;
-    if (!in_place_)
+    size_t output_size = 0;
+    if (in_place_)
     {
-        const size_t size = n_ * c_ * h_ * w_;
-        checkCudaErrors(cudaMalloc(&d_dy_, size));
-        total = size;
+        LayerConstPtr up = up_.lock();
+        assert(("Upstream is expired", up));
+        d_dy_ = up->getGradient();
     }
-    return total;
+    else
+    {
+        output_size = n_ * c_ * h_ * w_;
+        checkCudaErrors(cudaMalloc(&d_dy_, output_size));
+    }
+    return output_size;
 }
 
 void Softmax::fwdPropagation()
@@ -102,23 +102,30 @@ void Softmax::bwdPropagation()
 {
     NetworkConstPtr nn = network_.lock();
     assert(("Network is expired", nn));
-    cudnnHandle_t cudnn_handle = nn->getCudnnHandle();
-    const float* alpha         = nn->getAlpha();
-    const float* beta          = nn->getBeta();
+    LayerConstPtr up = up_.lock();
+    assert(("Upstream is expired", up));
 
-    /* TODO(Peter Han): not complete
-        checkCUDNN(cudnnSoftmaxBackward(cudnn_handle,
-                                        CUDNN_SOFTMAX_ACCURATE,
-                                        CUDNN_SOFTMAX_MODE_CHANNEL,
-                                        alpha,
-                                        tensor,
-                                        data,
-                                        tensor,
-                                        diff_data,
-                                        beta,
-                                        dst->tensor,
-                                        dst->diff_data));
-    */
+    cudnnHandle_t cudnn_handle     = nn->getCudnnHandle();
+    const float* alpha             = nn->getAlpha();
+    const float* beta              = nn->getBeta();
+    cudnnTensorDescriptor_t x_desc = up->getDescriptor();
+    float* d_dx                    = up->getGradient();
+
+    if (!d_dx)
+    {
+        return;
+    }
+    checkCUDNN(cudnnSoftmaxBackward(cudnn_handle,
+                                    CUDNN_SOFTMAX_ACCURATE,
+                                    CUDNN_SOFTMAX_MODE_CHANNEL,
+                                    alpha,
+                                    y_desc_,
+                                    d_y_,
+                                    y_desc_,
+                                    d_dy_,
+                                    beta,
+                                    x_desc,
+                                    d_dx));
 }
 
 void Softmax::updateWeights()
@@ -133,6 +140,11 @@ cudnnTensorDescriptor_t Softmax::getDescriptor() const
 float* Softmax::getTensor() const
 {
     return d_y_;
+}
+
+float* Softmax::getGradient() const
+{
+    return d_dy_;
 }
 
 }  // namespace layers
