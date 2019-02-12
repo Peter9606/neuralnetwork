@@ -105,7 +105,7 @@ public:
     /**
      * run forward propagation
      */
-    virtual void fwdPropagation() = 0;
+    virtual void fwdPropagation();
 
     /**
      * run backward propgation
@@ -114,7 +114,7 @@ public:
      * gradient
      * @return pointer to gradient on device w.r.t. current layer's output
      */
-    virtual void bwdPropagation() = 0;
+    virtual void bwdPropagation();
 
     /**
      * update weights

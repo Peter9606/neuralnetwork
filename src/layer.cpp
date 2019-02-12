@@ -42,6 +42,14 @@ size_t Layer::prepareBwdPropagation()
     return 0;
 }
 
+void Layer::fwdPropagation()
+{
+}
+
+void Layer::bwdPropagation()
+{
+}
+
 void Layer::updateWeights()
 {
 }

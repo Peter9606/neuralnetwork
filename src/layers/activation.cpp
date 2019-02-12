@@ -155,10 +155,6 @@ void Activation::bwdPropagation()
                                        d_dx));
 }
 
-void Activation::updateWeights()
-{
-}
-
 cudnnTensorDescriptor_t Activation::getDescriptor() const
 {
     return y_desc_;

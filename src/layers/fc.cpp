@@ -1,4 +1,5 @@
 #include <cassert>
+#include <random>
 
 #include "error_check.h"
 #include "layers/fc.h"
@@ -105,6 +106,23 @@ void FC::loadParameters(const shared_ptr<vector<float>>& h_params)
                         bias_bytes,
                         cudaMemcpyHostToDevice));
     */
+    LayerConstPtr up = up_.lock();
+    assert(("Upstream is expired", up));
+
+    std::vector<float> h_vect(input_length_ * output_length_);
+
+    std::random_device rd;
+    std::mt19937 gen(rd());
+    float w = sqrt(3.0f / (input_length_ * output_length_));
+    std::uniform_real_distribution<> dist(-w, w);
+    for (auto&& ite : h_vect)
+    {
+        ite = static_cast<float>(dist(gen));
+    }
+    cudaMemcpyAsync(d_weight_,
+                    &h_vect[0],
+                    sizeof(float) * h_vect.size(),
+                    cudaMemcpyHostToDevice);
 }
 
 shared_ptr<vector<float>> FC::saveParameters()

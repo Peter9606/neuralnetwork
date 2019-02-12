@@ -128,10 +128,6 @@ void Softmax::bwdPropagation()
                                     d_dx));
 }
 
-void Softmax::updateWeights()
-{
-}
-
 cudnnTensorDescriptor_t Softmax::getDescriptor() const
 {
     return y_desc_;

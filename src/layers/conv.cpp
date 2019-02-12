@@ -1,4 +1,5 @@
 #include <cassert>
+#include <random>
 
 #include "error_check.h"
 #include "layers/conv.h"
@@ -66,25 +67,47 @@ Conv::~Conv()
 
 void Conv::loadParameters(const shared_ptr<vector<float>>& h_params)
 {
-    // before loading parameters, all pointers on device should be null,
-    // otherwise memory leak on device, which also is NOT the scenario
-    assert(!d_filter_);
-    assert(!d_bias_);
+    /*
+        // before loading parameters, all pointers on device should be null,
+        // otherwise memory leak on device, which also is NOT the scenario
+        assert(!d_filter_);
+        assert(!d_bias_);
 
-    // only one bias corresponding to one filter
-    const size_t filter_num = kernel_.channel;
-    size_t one_filter_count = h_params->size() / filter_num - 1;  // 1 is bias
-    size_t filter_bytes     = one_filter_count * sizeof(float) * filter_num;
-    size_t bias_bytes       = 1 * sizeof(float) * filter_num;
+        // only one bias corresponding to one filter
+        const size_t filter_num = kernel_.channel;
+        size_t one_filter_count = h_params->size() / filter_num - 1;  // 1 is
+       bias size_t filter_bytes     = one_filter_count * sizeof(float) *
+       filter_num; size_t bias_bytes       = 1 * sizeof(float) * filter_num;
 
-    // move filters and bias to device
-    checkCudaErrors(cudaMemcpyAsync(
-        d_filter_, h_params->data(), filter_bytes, cudaMemcpyHostToDevice));
-    checkCudaErrors(
-        cudaMemcpyAsync(d_bias_,
-                        &h_params->data()[one_filter_count * filter_num],
-                        bias_bytes,
-                        cudaMemcpyHostToDevice));
+        // move filters and bias to device
+        checkCudaErrors(cudaMemcpyAsync(
+            d_filter_, h_params->data(), filter_bytes, cudaMemcpyHostToDevice));
+        checkCudaErrors(
+            cudaMemcpyAsync(d_bias_,
+                            &h_params->data()[one_filter_count * filter_num],
+                            bias_bytes,
+                            cudaMemcpyHostToDevice));
+    */
+    LayerConstPtr up = up_.lock();
+    assert(("Upstream is expired", up));
+
+    const int input_channel = up->getDim().c;
+    const size_t filter_length =
+        input_channel * kernel_.width * kernel_.height * kernel_.channel;
+    std::vector<float> h_vect(filter_length);
+
+    std::random_device rd;
+    std::mt19937 gen(rd());
+    float w = sqrt(3.0f / (input_channel * kernel_.width * kernel_.height));
+    std::uniform_real_distribution<> dist(-w, w);
+    for (auto&& ite : h_vect)
+    {
+        ite = static_cast<float>(dist(gen));
+    }
+    cudaMemcpyAsync(d_filter_,
+                    &h_vect[0],
+                    sizeof(float) * h_vect.size(),
+                    cudaMemcpyHostToDevice);
 }
 
 shared_ptr<vector<float>> Conv::saveParameters()
@@ -92,8 +115,7 @@ shared_ptr<vector<float>> Conv::saveParameters()
     assert(d_filter_);
     assert(d_bias_);
 
-    // TODO(Peter Han): NUST have already known the input feature map size
-    // and channels
+    // TODO(Peter Han)
 }
 
 size_t Conv::prepareFwdPropagation()

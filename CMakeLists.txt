@@ -36,8 +36,7 @@ link_directories(${CUDNN_LIBRARY})
 
 # nn library
 include_directories(include)
-set(NN_LIB nn)
-add_library(nn SHARED
+add_library(${PROJECT_NAME} SHARED
     src/network_impl.cpp
     src/layer.cpp
     src/layers/activation.cpp
@@ -50,7 +49,12 @@ add_library(nn SHARED
     src/layers/unpool.cpp
     src/gpu/compution.cu
 )
-target_link_libraries(${NN_LIB} ${CUDA_cublas_LIBRARY})
-target_link_libraries(${NN_LIB} ${CUDA_curand_LIBRARY})
-target_link_libraries(${NN_LIB} cudnn)
-target_link_libraries(${NN_LIB} stdc++fs)
+target_link_libraries(${PROJECT_NAME} ${CUDA_cublas_LIBRARY})
+target_link_libraries(${PROJECT_NAME} ${CUDA_curand_LIBRARY})
+target_link_libraries(${PROJECT_NAME} cudnn)
+target_link_libraries(${PROJECT_NAME} stdc++fs)
+
+#### TEST ####
+add_executable(test
+    src/main.cpp)
+target_link_libraries(test ${PROJECT_NAME})

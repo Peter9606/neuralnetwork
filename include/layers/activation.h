@@ -73,11 +73,6 @@ public:
     void bwdPropagation() final;
 
     /**
-     * update weights
-     */
-    void updateWeights() final;
-
-    /**
      * get output tensor descriptor
      *
      * @return output tensor descriptor
