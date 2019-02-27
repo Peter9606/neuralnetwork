@@ -5,15 +5,13 @@
 #include <cublas_v2.h>
 #include <cudnn.h>
 
-namespace nn
-{
+namespace nn {
 using std::shared_ptr;
 using std::weak_ptr;
 
 /** @struct ADAM solver
  */
-struct Adam
-{
+struct Adam {
     float alpha = 0.001;  // value from ADAM paper
     float alpha_t;        // this will be calcualted at each step
     float beta1   = 0.9;
@@ -25,8 +23,7 @@ struct Adam
 
 /** @struct SGD with Momentum
  */
-struct Msgd
-{
+struct Msgd {
     float momentum = 0.9;     // momentum
     float L2       = 0.0005;  // L2 or weight decay
     float lr       = 0.01;    // learning rate
@@ -35,8 +32,7 @@ struct Msgd
 
 /** @enum SolverType
  */
-enum SolverType
-{
+enum SolverType {
     SGD = 0,  // Stochastic Gradient Descent
     mSGD,     // mini-batch Gradient Descent with momentum
     ADAM,
@@ -45,12 +41,10 @@ enum SolverType
 
 /** @struct SolverSetting
  */
-struct SolverSetting
-{
+struct SolverSetting {
     float learning_rate;
     SolverType type;
-    union
-    {
+    union {
         Adam adam;
         Msgd msgd;
     } setting;
@@ -58,15 +52,13 @@ struct SolverSetting
 
 /** @enum LossType
  */
-enum LossType
-{
+enum LossType {
     CORSS_ENTROPY = 0,  // for classification mainly
     COMPOSITIONAL
 };
 
-class Network
-{
-public:
+class Network {
+ public:
     /**
      * get batch size
      *

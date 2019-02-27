@@ -6,28 +6,25 @@
 #include "layer.h"
 #include "layers/config.h"
 
-namespace nn
-{
-namespace layers
-{
+namespace nn {
+namespace layers {
 /** @class Softmax
  * @brief Softmax
  */
-class Softmax : public Layer
-{
-public:
+class Softmax : public Layer {
+ public:
     /**
      * Softmax constructor
      *
      * @param[in] name              layer name
      * @param[in] network           Network interface handle
      * @param[in] up                upstream layer
-     * @param[in] in_place          in place or not
+     * @param[in] in_place          in place or not, default is false
      */
     Softmax(const std::string& name,
             const NetworkConstPtr& network,
             const LayerConstPtr& up,
-            bool in_place);
+            bool in_place = false);
 
     /**
      * Desctructor
@@ -89,7 +86,7 @@ public:
      */
     float* getGradient() const;
 
-private:
+ private:
     const bool in_place_;
 
     cudnnTensorDescriptor_t y_desc_;

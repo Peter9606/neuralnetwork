@@ -1,14 +1,11 @@
 #pragma once
 
-namespace nn
-{
-namespace layers
-{
+namespace nn {
+namespace layers {
 /** @struct Window
  * Pooling window
  */
-struct Window
-{
+struct Window {
     int height;
     int width;
 };
@@ -16,8 +13,7 @@ struct Window
 /** @struct Pad
  * Horizontal and vertical direction padding.
  */
-struct Pad
-{
+struct Pad {
     int horizontal;
     int vertical;
 };
@@ -25,8 +21,7 @@ struct Pad
 /** @struct Stride
  * Horizontal and vertical stride.
  */
-struct Stride
-{
+struct Stride {
     int vertical;
     int horizontal;
 };
@@ -34,8 +29,7 @@ struct Stride
 /** @struct Kernel
  * kernel size and kernel number
  */
-struct Kernel
-{
+struct Kernel {
     int height;
     int width;
     int channel;
@@ -44,8 +38,7 @@ struct Kernel
 /** @struct Dilation
  * Filter height and width dilation
  */
-struct Dilation
-{
+struct Dilation {
     int height;
     int width;
 };
