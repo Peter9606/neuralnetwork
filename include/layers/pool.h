@@ -6,22 +6,18 @@
 #include "layer.h"
 #include "layers/config.h"
 
-namespace nn
-{
-namespace layers
-{
+namespace nn {
+namespace layers {
 /** @class Pool
  * @brief Pool support max pooling
  */
-class Pool : public Layer
-{
-public:
-    enum Type : int
-    {
+class Pool : public Layer {
+ public:
+    enum Type : int {
         MAX,
     };
 
-public:
+ public:
     /**
      * Pool constructor
      *
@@ -29,7 +25,25 @@ public:
      * @param[in] network           Network interface handle
      * @param[in] up                upstream layer
      * @param[in] window            pooling window
+     * @param[in] stride            stride
      * @param[in] pad               padding
+     * @param[in] type              pooling type
+     */
+    Pool(const std::string& name,
+         const NetworkConstPtr& network,
+         const LayerConstPtr& up,
+         const Window& window,
+         const Stride& stride,
+         const Pad& pad,
+         Type type);
+
+    /**
+     * Pool constructor with no padding
+     *
+     * @param[in] name              layer name
+     * @param[in] network           Network interface handle
+     * @param[in] up                upstream layer
+     * @param[in] window            pooling window
      * @param[in] stride            stride
      * @param[in] type              pooling type
      */
@@ -37,7 +51,6 @@ public:
          const NetworkConstPtr& network,
          const LayerConstPtr& up,
          const Window& window,
-         const Pad& pad,
          const Stride& stride,
          Type type);
 
@@ -91,7 +104,7 @@ public:
      */
     float* getGradient() const;
 
-private:
+ private:
     const Window window_;
     const Pad pad_;
     const Stride stride_;

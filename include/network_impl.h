@@ -1,15 +1,17 @@
 #pragma once
+#include <memory>
 #include <vector>
 
 // self
 #include "layer.h"
 #include "network.h"
 
-namespace nn
-{
-class NetworkImpl : public Network
-{
-public:
+using std::shared_ptr;
+using std::vector;
+
+namespace nn {
+class NetworkImpl : public Network, std::enable_shared_from_this<NetworkImpl> {
+ public:
     /**
      * Constructor build a Network object
      *
@@ -111,15 +113,32 @@ public:
      * @param[in] h_data 	data vector located in host
      * @param[in] h_label 	label vector located in host
      */
-    void train(std::shared_ptr<std::vector<float>>& h_data,
-               std::shared_ptr<std::vector<float>>& h_label) const;
+    void train(shared_ptr<vector<float>>& h_data,
+               shared_ptr<vector<float>>& h_label) const;
 
-private:
+    /**
+     * @brief compute loss
+     * Concrate network should have have implementation
+     *
+     * @param[in]       d_result    last layer's output
+     * @param[in]       d_label     label data in device
+     * @param[in/out]   d_lost      last layer's differential
+     */
+    virtual void computeLoss(const float* d_result,
+                             const float* d_label,
+                             float* d_lost) const;
+
+    /**
+     * @brief construct network topology
+     */
+    virtual void buildNetwork();
+
+ private:
     void fwdPropagation(const float* d_data) const;
     void bwdPropagation(const float* d_label) const;
     void updateWeights() const;
 
-private:
+ private:
     float alpha_ = 1.0f;
     float beta_  = 0.0f;
     const int batch_size_;
@@ -133,6 +152,6 @@ private:
 
     mutable size_t workspace_size_;
     float* d_workspace_ = nullptr;
-    std::vector<std::shared_ptr<Layer>> layers_;
+    vector<shared_ptr<Layer>> layers_;
 };  // namespace nn
 }  // namespace nn

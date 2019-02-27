@@ -11,8 +11,7 @@
 // self
 #include "network.h"
 
-namespace nn
-{
+namespace nn {
 using std::shared_ptr;
 using std::vector;
 using std::weak_ptr;
@@ -20,8 +19,7 @@ using std::weak_ptr;
 /** @struct Dim
  * A dimension for channel, height and width
  */
-struct Dim
-{
+struct Dim {
     int c;
     int h;
     int w;
@@ -35,11 +33,9 @@ struct Dim
  * Below figure illustrates what is upstream & downstream image:
  * image...--> upstream --> current layer --> downstream -->...result
  */
-class Layer : public std::enable_shared_from_this<Layer>
-{
-public:
-    enum Type : int
-    {
+class Layer : public std::enable_shared_from_this<Layer> {
+ public:
+    enum Type : int {
         INPUT = 0,
         CONV,
         RELU,
@@ -49,7 +45,7 @@ public:
         UNPOOL,
     };
 
-public:
+ public:
     /**
      * Layer constructor
      *
@@ -159,7 +155,7 @@ public:
      */
     virtual float* getGradient() const;
 
-protected:
+ protected:
     const std::string name_;
     const weak_ptr<Network const> network_;
     const weak_ptr<Layer const> up_;

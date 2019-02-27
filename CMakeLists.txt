@@ -37,7 +37,7 @@ link_directories(${CUDNN_LIBRARY})
 # nn library
 include_directories(include)
 add_library(${PROJECT_NAME} SHARED
-    src/network_impl.cpp
+    src/network_impl.cu
     src/layer.cpp
     src/layers/activation.cpp
     src/layers/conv.cpp
