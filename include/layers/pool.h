@@ -110,8 +110,8 @@ class Pool : public Layer {
     const Stride stride_;
     const Type type_;
 
-    cudnnPoolingDescriptor_t pool_desc_;
-    cudnnTensorDescriptor_t y_desc_;
+    cudnnPoolingDescriptor_t pool_desc_ = nullptr;
+    cudnnTensorDescriptor_t y_desc_     = nullptr;
 
     float* d_y_  = nullptr;
     float* d_dy_ = nullptr;

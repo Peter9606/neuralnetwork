@@ -4,25 +4,25 @@
 #include "error_check.h"
 #include "layers/fc.h"
 
-namespace nn
-{
-namespace layers
-{
+namespace nn {
+namespace layers {
 FC::FC(const std::string& name,
        const NetworkConstPtr& network,
        const LayerConstPtr& up,
        int output_length)
     : Layer(name, network, up)
     , input_length_(up->getDim().h * up->getDim().w * up->getDim().c)
-    , output_length_(output_length)
-{
+    , output_length_(output_length) {
     c_ = output_length_;
     h_ = 1;
     w_ = 1;
+
+    checkCUDNN(cudnnCreateTensorDescriptor(&y_desc_));
+    checkCUDNN(cudnnSetTensor4dDescriptor(
+        y_desc_, CUDNN_TENSOR_NCHW, CUDNN_DATA_FLOAT, n_, c_, h_, w_));
 }
 
-FC::~FC()
-{
+FC::~FC() {
     checkCUDNN(cudnnDestroyTensorDescriptor(y_desc_));
 
     checkCudaErrors(cudaFree(d_weight_));
@@ -34,17 +34,12 @@ FC::~FC()
     checkCudaErrors(cudaFree(d_one_vector_));
 }
 
-size_t FC::prepareFwdPropagation()
-{
+size_t FC::prepareFwdPropagation() {
     const size_t tensor_size = sizeof(float) * n_ * c_ * h_ * w_;
     const size_t weight_size = sizeof(float) * input_length_ * output_length_;
     const size_t bias_size   = sizeof(float) * output_length_;
     const size_t vector_size = sizeof(float) * n_;
     const size_t total = tensor_size + weight_size + bias_size + vector_size;
-
-    checkCUDNN(cudnnCreateTensorDescriptor(&y_desc_));
-    checkCUDNN(cudnnSetTensor4dDescriptor(
-        y_desc_, CUDNN_TENSOR_NCHW, CUDNN_DATA_FLOAT, n_, c_, h_, w_));
 
     checkCudaErrors(cudaMalloc(&d_y_, tensor_size));
     checkCudaErrors(cudaMalloc(&d_weight_, weight_size));
@@ -56,21 +51,19 @@ size_t FC::prepareFwdPropagation()
     // as it only varies for different batch size. So move it to Network class
     // TODO(Peter Han): do it in GPU
     std::vector<float> h_one_vector(n_);
-    for (auto&& i : h_one_vector)
-    {
+    for (auto&& i : h_one_vector) {
         i = 1;
     }
     // FIXME(Peter Han): sync or async version, which one?
-    checkCudaErrors(cudaMemcpy(d_one_vector_,
-                               h_one_vector.data(),
-                               sizeof(float) * n_,
-                               cudaMemcpyHostToDevice));
+    checkCudaErrors(cudaMemcpyAsync(d_one_vector_,
+                                    h_one_vector.data(),
+                                    sizeof(float) * n_,
+                                    cudaMemcpyHostToDevice));
 
     return total;
 }
 
-size_t FC::prepareBwdPropagation()
-{
+size_t FC::prepareBwdPropagation() {
     const size_t tensor_size = sizeof(float) * n_ * c_ * h_ * w_;
     const size_t weight_size = sizeof(float) * input_length_ * output_length_;
     const size_t bias_size   = sizeof(float) * output_length_;
@@ -83,12 +76,12 @@ size_t FC::prepareBwdPropagation()
     return total;
 }
 
-void FC::loadParameters(const shared_ptr<vector<float>>& h_params)
-{
+void FC::loadParameters(const shared_ptr<vector<float>>& h_params) {
     // before loading parameters, all pointers on device should be null,
     // otherwise memory leak on device, which also is NOT the scenario
-    assert(!d_bias_);
-    assert(!d_weight_);
+
+    assert(d_bias_);
+    assert(d_weight_);
 
     // only one bias corresponding to one filter
     /*
@@ -109,30 +102,38 @@ void FC::loadParameters(const shared_ptr<vector<float>>& h_params)
     LayerConstPtr up = up_.lock();
     assert(("Upstream is expired", up));
 
-    std::vector<float> h_vect(input_length_ * output_length_);
-
     std::random_device rd;
     std::mt19937 gen(rd());
     float w = sqrt(3.0f / (input_length_ * output_length_));
     std::uniform_real_distribution<> dist(-w, w);
-    for (auto&& ite : h_vect)
     {
-        ite = static_cast<float>(dist(gen));
+        std::vector<float> weight(input_length_ * output_length_);
+        for (auto&& ite : weight) {
+            ite = static_cast<float>(dist(gen));
+        }
+        cudaMemcpyAsync(d_weight_,
+                        &weight[0],
+                        sizeof(float) * weight.size(),
+                        cudaMemcpyHostToDevice);
     }
-    cudaMemcpyAsync(d_weight_,
-                    &h_vect[0],
-                    sizeof(float) * h_vect.size(),
-                    cudaMemcpyHostToDevice);
+    {
+        std::vector<float> bias(output_length_);
+        for (auto&& ite : bias) {
+            ite = static_cast<float>(dist(gen));
+        }
+        cudaMemcpyAsync(d_bias_,
+                        &bias[0],
+                        sizeof(float) * bias.size(),
+                        cudaMemcpyHostToDevice);
+    }
 }
 
-shared_ptr<vector<float>> FC::saveParameters()
-{
+shared_ptr<vector<float>> FC::saveParameters() {
     assert(d_weight_);
     assert(d_bias_);
 }
 
-void FC::fwdPropagation()
-{
+void FC::fwdPropagation() {
     NetworkConstPtr nn = network_.lock();
     assert(("Network is expired", nn));
     LayerConstPtr up = up_.lock();
@@ -146,17 +147,17 @@ void FC::fwdPropagation()
     checkCudaErrors(cublasSgemm(cublas_handle,
                                 CUBLAS_OP_T,
                                 CUBLAS_OP_N,
-                                input_length_,
                                 output_length_,
                                 n_,
+                                input_length_,
                                 alpha,
+                                d_weight_,
+                                input_length_,
                                 d_x,
                                 input_length_,
-                                d_weight_,
-                                output_length_,
                                 beta,
-                                d_dy_,
-                                input_length_));
+                                d_y_,
+                                output_length_));
 
     checkCudaErrors(cublasSgemm(cublas_handle,
                                 CUBLAS_OP_N,
@@ -174,8 +175,7 @@ void FC::fwdPropagation()
                                 output_length_));
 }
 
-void FC::bwdPropagation()
-{
+void FC::bwdPropagation() {
     NetworkConstPtr nn = network_.lock();
     assert(("Network is expired", nn));
     LayerConstPtr up = up_.lock();
@@ -217,8 +217,7 @@ void FC::bwdPropagation()
                                 d_dbias_,
                                 1));
 
-    if (!d_dx)
-    {
+    if (!d_dx) {
         return;
     }
     // compute derivative w.r.t. data
@@ -238,8 +237,7 @@ void FC::bwdPropagation()
                                 input_length_));
 }
 
-void FC::updateWeights()
-{
+void FC::updateWeights() {
     NetworkConstPtr nn = network_.lock();
     assert(("Network is expired", nn));
     LayerConstPtr up = up_.lock();
@@ -247,9 +245,9 @@ void FC::updateWeights()
 
     cublasHandle_t cublas_handle = nn->getCublasHandle();
     const SolverSetting setting  = nn->getSolverSetting();
-    const float learning_rate    = setting.learning_rate;
-    const size_t weight_size = sizeof(float) * input_length_ * output_length_;
-    const size_t bias_size   = sizeof(float) * output_length_;
+    const float learning_rate    = -setting.learning_rate;
+    const size_t weight_size     = input_length_ * output_length_;
+    const size_t bias_size       = output_length_;
 
     checkCudaErrors(cublasSaxpy(cublas_handle,
                                 static_cast<int>(weight_size),
@@ -267,18 +265,15 @@ void FC::updateWeights()
                                 1));
 }
 
-cudnnTensorDescriptor_t FC::getDescriptor() const
-{
+cudnnTensorDescriptor_t FC::getDescriptor() const {
     return y_desc_;
 }
 
-float* FC::getTensor() const
-{
+float* FC::getTensor() const {
     return d_y_;
 }
 
-float* FC::getGradient() const
-{
+float* FC::getGradient() const {
     return d_dy_;
 }
 }  // namespace layers

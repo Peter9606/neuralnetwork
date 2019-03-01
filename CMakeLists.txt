@@ -1,11 +1,12 @@
 cmake_minimum_required (VERSION 3.9)
 project (NeuralNetwork)
+#set(CMAKE_BUILD_TYPE Debug)
 
 # utilities
 include(${CMAKE_CURRENT_SOURCE_DIR}/cmake/FindCUDNN.cmake)
 
 # NVCC flags
-find_package(CUDA 7 REQUIRED)
+find_package(CUDA 8 REQUIRED)
 set(CUDA_NVCC_FLAGS ${CUDA_NVCC_FLAGS};-std=c++14)
 set(CUDA_NVCC_FLAGS ${CUDA_NVCC_FLAGS};-Xcompiler)
 if(CMAKE_BUILD_TYPE STREQUAL "Debug")
@@ -36,8 +37,8 @@ link_directories(${CUDNN_LIBRARY})
 
 # nn library
 include_directories(include)
-add_library(${PROJECT_NAME} SHARED
-    src/network_impl.cu
+cuda_add_library(${PROJECT_NAME} SHARED
+    src/network_impl.cpp
     src/layer.cpp
     src/layers/activation.cpp
     src/layers/conv.cpp
@@ -55,6 +56,8 @@ target_link_libraries(${PROJECT_NAME} cudnn)
 target_link_libraries(${PROJECT_NAME} stdc++fs)
 
 #### TEST ####
-add_executable(test
-    src/main.cpp)
+cuda_add_executable(test
+    src/main.cpp
+    src/readubyte.cpp)
+link_directories(${CMAKE_BINARY_DIR})
 target_link_libraries(test ${PROJECT_NAME})

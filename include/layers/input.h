@@ -2,16 +2,13 @@
 // self
 #include "layer.h"
 
-namespace nn
-{
-namespace layers
-{
+namespace nn {
+namespace layers {
 /** @class Input
  * @brief A layer take the input data, sepcificly image in CNN.
  */
-class Input : public Layer
-{
-public:
+class Input : public Layer {
+ public:
     /**
      * constructor of Input layer
      *
@@ -59,8 +56,8 @@ public:
      */
     float* getTensor() const;
 
-private:
-    cudnnTensorDescriptor_t y_desc_;
+ private:
+    cudnnTensorDescriptor_t y_desc_ = nullptr;
 
     float* d_y_ = nullptr;
 };

@@ -5,18 +5,14 @@
 // self
 #include "layer.h"
 
-namespace nn
-{
-namespace layers
-{
+namespace nn {
+namespace layers {
 /** @class Activation
  * @brief Activation layer, support ReLU, Sigmoid, Tanh, Clipped ReLU and ELU
  */
-class Activation : public Layer
-{
-public:
-    enum Type : int
-    {
+class Activation : public Layer {
+ public:
+    enum Type : int {
         SIGMOID,
         RELU,
         TANH,
@@ -24,7 +20,7 @@ public:
         ELU,
     };
 
-public:
+ public:
     /**
      * Activation constructor
      *
@@ -93,13 +89,13 @@ public:
      */
     float* getGradient() const;
 
-private:
+ private:
     const Type type_;
     const double coef_;
     const bool in_place_;
 
-    cudnnActivationDescriptor_t activation_desc_;
-    cudnnTensorDescriptor_t y_desc_;
+    cudnnActivationDescriptor_t activation_desc_ = nullptr;
+    cudnnTensorDescriptor_t y_desc_              = nullptr;
 
     float* d_y_  = nullptr;
     float* d_dy_ = nullptr;

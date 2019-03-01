@@ -60,7 +60,7 @@ class Layer : public std::enable_shared_from_this<Layer> {
     /**
      * Layer destructor
      */
-    virtual ~Layer() = 0;
+    virtual ~Layer() = default;
 
     /**
      * load parameters from given data existing in host.

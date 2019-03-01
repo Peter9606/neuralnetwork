@@ -4,8 +4,7 @@
 #include "error_check.h"
 #include "layers/activation.h"
 
-namespace
-{
+namespace {
 using nn::layers::Activation;
 
 static std::map<Activation::Type, cudnnActivationMode_t> MODE = {
@@ -17,10 +16,8 @@ static std::map<Activation::Type, cudnnActivationMode_t> MODE = {
 };
 }  // namespace
 
-namespace nn
-{
-namespace layers
-{
+namespace nn {
+namespace layers {
 Activation::Activation(const std::string& name,
                        const NetworkConstPtr& network,
                        const LayerConstPtr& up,
@@ -37,71 +34,59 @@ Activation::Activation(const std::string& name,
     c_    = d.c;
     h_    = d.h;
     w_    = d.w;
-}
-
-Activation::~Activation()
-{
-    checkCUDNN(cudnnDestroyActivationDescriptor(activation_desc_));
-
-    if (!in_place_)
-    {
-        checkCUDNN(cudnnDestroyTensorDescriptor(y_desc_));
-        checkCudaErrors(cudaFree(d_y_));
-        checkCudaErrors(cudaFree(d_dy_));
-    }
-}
-
-size_t Activation::prepareFwdPropagation()
-{
-    NetworkConstPtr nn = network_.lock();
-    assert(("Network is expired", nn));
-    LayerConstPtr up = up_.lock();
-    assert(("Upstream is expired", up));
 
     checkCUDNN(cudnnCreateActivationDescriptor(&activation_desc_));
     checkCUDNN(cudnnSetActivationDescriptor(
         activation_desc_, ::MODE[type_], CUDNN_PROPAGATE_NAN, coef_));
 
-    size_t total = 0;
-    if (!in_place_)
-    {
-        total = n_ * c_ * h_ * w_;
-        checkCudaErrors(cudaMalloc(&d_y_, total));
-
+    if (in_place_) {
+        y_desc_ = up->getDescriptor();
+    } else {
         checkCUDNN(cudnnCreateTensorDescriptor(&y_desc_));
         checkCUDNN(cudnnSetTensor4dDescriptor(
             y_desc_, CUDNN_TENSOR_NCHW, CUDNN_DATA_FLOAT, n_, c_, h_, w_));
     }
-    else
-    {
-        y_desc_ = up->getDescriptor();
-        d_y_    = up->getTensor();
-    }
-
-    return total;
 }
 
-size_t Activation::prepareBwdPropagation()
-{
-    LayerConstPtr up = up_.lock();
-    assert(("Upstream is expired", up));
+Activation::~Activation() {
+    checkCUDNN(cudnnDestroyActivationDescriptor(activation_desc_));
 
-    size_t total = 0;
-    if (!in_place_)
-    {
-        total = n_ * c_ * h_ * w_;
-        checkCudaErrors(cudaMalloc(&d_dy_, total));
+    if (in_place_) {
+        return;
     }
-    else
-    {
+
+    checkCUDNN(cudnnDestroyTensorDescriptor(y_desc_));
+    checkCudaErrors(cudaFree(d_y_));
+    checkCudaErrors(cudaFree(d_dy_));
+}
+
+size_t Activation::prepareFwdPropagation() {
+    if (in_place_) {
+        LayerConstPtr up = up_.lock();
+        assert(("Upstream is expired", up));
+        d_y_ = up->getTensor();
+        return 0;
+    } else {
+        size_t total = n_ * c_ * h_ * w_ * sizeof(float);
+        checkCudaErrors(cudaMalloc(&d_y_, total));
+        return total;
+    }
+}
+
+size_t Activation::prepareBwdPropagation() {
+    if (in_place_) {
+        LayerConstPtr up = up_.lock();
+        assert(("Upstream is expired", up));
         d_dy_ = up->getGradient();
+        return 0;
+    } else {
+        size_t total = n_ * c_ * h_ * w_ * sizeof(float);
+        checkCudaErrors(cudaMalloc(&d_dy_, total));
+        return total;
     }
-
-    return total;
 }
 
-void Activation::fwdPropagation()
-{
+void Activation::fwdPropagation() {
     NetworkConstPtr nn = network_.lock();
     assert(("Network is expired", nn));
     LayerConstPtr up = up_.lock();
@@ -123,8 +108,7 @@ void Activation::fwdPropagation()
                                       d_y_));
 }
 
-void Activation::bwdPropagation()
-{
+void Activation::bwdPropagation() {
     NetworkConstPtr nn = network_.lock();
     assert(("Network is expired", nn));
     LayerConstPtr up = up_.lock();
@@ -137,8 +121,7 @@ void Activation::bwdPropagation()
     float* d_x                     = up->getTensor();
     float* d_dx                    = up->getGradient();
 
-    if (!d_dx)
-    {
+    if (!d_dx) {
         return;
     }
     checkCUDNN(cudnnActivationBackward(cudnn_handle,
@@ -155,14 +138,16 @@ void Activation::bwdPropagation()
                                        d_dx));
 }
 
-cudnnTensorDescriptor_t Activation::getDescriptor() const
-{
+cudnnTensorDescriptor_t Activation::getDescriptor() const {
     return y_desc_;
 }
 
-float* Activation::getTensor() const
-{
+float* Activation::getTensor() const {
     return d_y_;
+}
+
+float* Activation::getGradient() const {
+    return d_dy_;
 }
 
 }  // namespace layers

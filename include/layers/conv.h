@@ -6,16 +6,13 @@
 #include "layer.h"
 #include "layers/config.h"
 
-namespace nn
-{
-namespace layers
-{
+namespace nn {
+namespace layers {
 /** @class Conv
  * @brief Convolution layer
  */
-class Conv : public Layer
-{
-public:
+class Conv : public Layer {
+ public:
     /**
      * Conv constructor
      *
@@ -157,18 +154,18 @@ public:
      */
     float* getGradient() const;
 
-private:
+ private:
     const Kernel kernel_;
     const Pad pad_;
     const Stride stride_;
     const Dilation dilation_;
 
-    cudnnTensorDescriptor_t y_desc_;
-    cudnnTensorDescriptor_t bias_desc_;
-    cudnnFilterDescriptor_t filter_desc_;
-    cudnnConvolutionDescriptor_t conv_desc_;
-    cudnnConvolutionFwdAlgo_t fwd_algo_;
+    cudnnTensorDescriptor_t y_desc_         = nullptr;
+    cudnnTensorDescriptor_t bias_desc_      = nullptr;
+    cudnnFilterDescriptor_t filter_desc_    = nullptr;
+    cudnnConvolutionDescriptor_t conv_desc_ = nullptr;
 
+    cudnnConvolutionFwdAlgo_t fwd_algo_;
     cudnnConvolutionBwdFilterAlgo_t bwd_filter_algo_;
     cudnnConvolutionBwdDataAlgo_t bwd_data_algo_;
 
