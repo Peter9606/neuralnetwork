@@ -10,3 +10,21 @@
  * ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR
  * OTHER DEALINGS IN THE SOFTWARE.
  */
+#pragma once
+// cudnn
+#include <cudnn.h>
+
+// self
+#include "neuralnetwork/layer.h"
+
+namespace nn {
+namespace layers {
+/** @class Unpool
+ * @brief Unpool layer
+ */
+class Unpool : public Layer {
+ public:
+};
+
+}  // namespace layers
+}  // namespace nn

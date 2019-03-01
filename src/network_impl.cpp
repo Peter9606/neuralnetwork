@@ -1,28 +1,36 @@
-#include "network_impl.h"
+/*
+ * Copyright 2019, Peter Han, All rights reserved.
+ * This code is released into the public domain.
+ *
+ * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND,
+ * EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF
+ * MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT.
+ * IN NO EVENT SHALL THE AUTHORS BE LIABLE FOR ANY CLAIM, DAMAGES OR
+ * OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE,
+ * ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR
+ * OTHER DEALINGS IN THE SOFTWARE.
+ */
+#include <cudnn.h>
 
-// standard
 #include <cassert>
-#include <chrono>
+#include <chrono>  //NOLINT
 #include <iomanip>
 #include <iostream>
 #include <memory>
 #include <vector>
 
-#include <cudnn.h>
-
-// self
-#include "error_check.h"
-
-#include "gpu/compution.cuh"
-#include "layers/activation.h"
-#include "layers/config.h"
-#include "layers/conv.h"
-#include "layers/dropout.h"
-#include "layers/fc.h"
-#include "layers/input.h"
-#include "layers/pool.h"
-#include "layers/softmax.h"
-#include "layers/unpool.h"
+#include "neuralnetwork/error_check.h"
+#include "neuralnetwork/gpu/compution.cuh"
+#include "neuralnetwork/layers/activation.h"
+#include "neuralnetwork/layers/config.h"
+#include "neuralnetwork/layers/conv.h"
+#include "neuralnetwork/layers/dropout.h"
+#include "neuralnetwork/layers/fc.h"
+#include "neuralnetwork/layers/input.h"
+#include "neuralnetwork/layers/pool.h"
+#include "neuralnetwork/layers/softmax.h"
+#include "neuralnetwork/layers/unpool.h"
+#include "neuralnetwork/network_impl.h"
 
 using nn::layers::Activation;
 using nn::layers::Conv;
@@ -76,8 +84,8 @@ NetworkImpl::~NetworkImpl() {
     checkCudaErrors(cudaFree(d_workspace_));
 }
 
-void NetworkImpl::train(shared_ptr<vector<float>> &h_data,
-                        shared_ptr<vector<float>> &h_label) const {
+void NetworkImpl::train(const shared_ptr<vector<float>> &h_data,
+                        const shared_ptr<vector<float>> &h_label) const {
     size_t malloced_size = 0;
     for (auto &&l : layers_) {
         malloced_size += l->prepareFwdPropagation();
@@ -163,7 +171,7 @@ void NetworkImpl::train(shared_ptr<vector<float>> &h_data,
                 if (chosen != h_label->at(imageid * batch_size_ + i))
                     ++num_errors;
             }
-            float err = (float)num_errors / (float)batch_size_;
+            float err = static_cast<float>(num_errors) / batch_size_;
             log_->info("Iter: {}, Error rates: {}", iter, err * 100.0f);
         }
     }
@@ -279,7 +287,7 @@ int NetworkImpl::getBatchSize() const {
     return batch_size_;
 }
 
-void NetworkImpl::updateMemoryNeeded(long inc) const {
+void NetworkImpl::updateMemoryNeeded(size_t inc) const {
     memory_needed_ += inc;
 }
 

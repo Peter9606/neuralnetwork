@@ -10,3 +10,19 @@
  * ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR
  * OTHER DEALINGS IN THE SOFTWARE.
  */
+#pragma once
+#include <cudnn.h>
+
+#include "neuralnetwork/layer.h"
+
+namespace nn {
+namespace layers {
+/** @class Dropout
+ * @brief Dropout layer
+ */
+class Dropout : public Layer {
+ public:
+};
+
+}  // namespace layers
+}  // namespace nn

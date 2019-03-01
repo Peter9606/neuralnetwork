@@ -1,9 +1,21 @@
+/*
+ * Copyright 2019, Peter Han, All rights reserved.
+ * This code is released into the public domain.
+ *
+ * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND,
+ * EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF
+ * MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT.
+ * IN NO EVENT SHALL THE AUTHORS BE LIABLE FOR ANY CLAIM, DAMAGES OR
+ * OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE,
+ * ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR
+ * OTHER DEALINGS IN THE SOFTWARE.
+ */
 #include <iostream>
 #include <memory>
 #include <vector>
 
-#include "network_impl.h"
-#include "readubyte.h"
+#include "neuralnetwork/network_impl.h"
+#include "neuralnetwork/readubyte.h"
 
 using nn::Network;
 using nn::NetworkImpl;
@@ -25,8 +37,12 @@ int main() try {
     std::cout << "Reading input data" << std::endl;
 
     // Read dataset sizes
-    size_t train_size = ReadUByteDataset(
-        train_images_path, train_labels_path, nullptr, nullptr, width, height);
+    size_t train_size = ReadUByteDataset(train_images_path,
+                                         train_labels_path,
+                                         nullptr,
+                                         nullptr,
+                                         &width,
+                                         &height);
 
     if (train_size == 0) {
         return 1;
@@ -40,8 +56,8 @@ int main() try {
                          train_labels_path,
                          &train_images[0],
                          &train_labels[0],
-                         width,
-                         height) != train_size) {
+                         &width,
+                         &height) != train_size) {
         return 2;
     }
 
@@ -57,10 +73,10 @@ int main() try {
         make_shared<vector<float>>(train_size);
 
     for (size_t i = 0; i < train_size * channels * width * height; ++i)
-        (*train_images_float)[i] = (float)train_images[i] / 255.0f;
+        (*train_images_float)[i] = static_cast<float>(train_images[i] / 255.0f);
 
     for (size_t i = 0; i < train_size; ++i)
-        (*train_labels_float)[i] = (float)train_labels[i];
+        (*train_labels_float)[i] = static_cast<float>(train_labels[i]);
 
     shared_ptr<NetworkImpl> lenet = make_shared<NetworkImpl>(batch_size);
     lenet->buildNetwork();

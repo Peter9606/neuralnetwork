@@ -1,11 +1,23 @@
+/*
+ * Copyright 2019, Peter Han, All rights reserved.
+ * This code is released into the public domain.
+ *
+ * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND,
+ * EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF
+ * MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT.
+ * IN NO EVENT SHALL THE AUTHORS BE LIABLE FOR ANY CLAIM, DAMAGES OR
+ * OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE,
+ * ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR
+ * OTHER DEALINGS IN THE SOFTWARE.
+ */
 #pragma once
 #include <memory>
 #include <vector>
 
 // self
-#include "layer.h"
-#include "logger.h"
-#include "network.h"
+#include "neuralnetwork/layer.h"
+#include "neuralnetwork/logger.h"
+#include "neuralnetwork/network.h"
 
 using std::shared_ptr;
 using std::vector;
@@ -31,7 +43,7 @@ class NetworkImpl : public Network,
      *
      * @param[in] batch_size  batch size
      */
-    NetworkImpl(int batch_size);
+    explicit NetworkImpl(int batch_size);
 
     /**
      * destructor
@@ -50,7 +62,7 @@ class NetworkImpl : public Network,
      *
      * @param[in] inc increment GPU memory in byte
      */
-    void updateMemoryNeeded(long inc) const final;
+    void updateMemoryNeeded(size_t inc) const final;
 
     /**
      * get solver setting
@@ -125,8 +137,8 @@ class NetworkImpl : public Network,
      * @param[in] h_data 	data vector located in host
      * @param[in] h_label 	label vector located in host
      */
-    void train(shared_ptr<vector<float>>& h_data,
-               shared_ptr<vector<float>>& h_label) const;
+    void train(const shared_ptr<vector<float>>& h_data,
+               const shared_ptr<vector<float>>& h_label) const;
 
     /**
      * @brief compute loss
@@ -154,7 +166,7 @@ class NetworkImpl : public Network,
     Dim dim_;
     SolverSetting solver_setting_;
     LossType loss_type_;
-    mutable long memory_needed_ = 0;
+    mutable size_t memory_needed_ = 0;
 
     cudnnHandle_t cudnn_handle_;
     cublasHandle_t cublas_handle_;
