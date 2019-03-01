@@ -18,7 +18,7 @@ int main() try {
     size_t width                        = 1;
     size_t height                       = 1;
     size_t channels                     = 1;
-    int batch_size                      = 48;
+    int batch_size                      = 128;
     const char* const train_images_path = "train-images-idx3-ubyte";
     const char* const train_labels_path = "train-labels-idx1-ubyte";
 

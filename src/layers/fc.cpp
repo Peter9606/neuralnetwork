@@ -218,6 +218,7 @@ void FC::bwdPropagation() {
                                 1));
 
     if (!d_dx) {
+        log_->trace("{} bwdPropagation shortcut as no upstream", name_);
         return;
     }
     // compute derivative w.r.t. data
@@ -244,8 +245,7 @@ void FC::updateWeights() {
     assert(("Up stream is expired", up));
 
     cublasHandle_t cublas_handle = nn->getCublasHandle();
-    const SolverSetting setting  = nn->getSolverSetting();
-    const float learning_rate    = -setting.learning_rate;
+    const float learning_rate    = -nn->getSolverSetting().learning_rate;
     const size_t weight_size     = input_length_ * output_length_;
     const size_t bias_size       = output_length_;
 

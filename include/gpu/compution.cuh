@@ -14,8 +14,3 @@ void calculateLossWithGpu(const float* d_label,
                           int label_size,
                           int batch_size,
                           float* d_loss);
-
-/**
- * Computes ceil(x / y) for integral nonnegative values.
- */
-unsigned int RoundUp(unsigned int nominator, unsigned int denominator);
