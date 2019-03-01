@@ -1,16 +1,24 @@
+/*
+ * Copyright 2019, Peter Han, All rights reserved.
+ * This code is released into the public domain.
+ *
+ * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND,
+ * EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF
+ * MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT.
+ * IN NO EVENT SHALL THE AUTHORS BE LIABLE FOR ANY CLAIM, DAMAGES OR
+ * OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE,
+ * ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR
+ * OTHER DEALINGS IN THE SOFTWARE.
+ */
 #pragma once
-// standard
-#include <cassert>
+#include <cudnn.h>
+
 #include <memory>
 #include <string>
 #include <vector>
 
-// cudnn
-#include <cudnn.h>
-
-// self
-#include "logger.h"
-#include "network.h"
+#include "neuralnetwork/logger.h"
+#include "neuralnetwork/network.h"
 
 namespace nn {
 using std::shared_ptr;

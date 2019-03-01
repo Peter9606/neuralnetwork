@@ -1,6 +1,18 @@
+# Copyright 2019, Peter Han, All rights reserved.
+# This code is released into the public domain.
+#
+# THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND,
+# EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF
+# MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT.
+# IN NO EVENT SHALL THE AUTHORS BE LIABLE FOR ANY CLAIM, DAMAGES OR
+# OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE,
+# ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR
+# OTHER DEALINGS IN THE SOFTWARE.
+
 cmake_minimum_required (VERSION 3.9)
 project (NeuralNetwork)
-#set(CMAKE_BUILD_TYPE Debug)
+
+option(CPPCHECK "use cpplint to check code" ON)
 
 # utilities
 include(${CMAKE_CURRENT_SOURCE_DIR}/cmake/FindCUDNN.cmake)
@@ -64,3 +76,26 @@ cuda_add_executable(test
     src/readubyte.cpp)
 link_directories(${CMAKE_BINARY_DIR})
 target_link_libraries(test ${PROJECT_NAME})
+
+
+#### STATIC CHECK ####
+if(CPPCHECK)
+    set(CPPCHECK_TARGET "cpplint")
+    find_file(CPPLINT cpplint)
+    if(CPPLINT)
+        message(STATUS "find cpplint executable")
+    else()
+        message(FALTAL_ERROR "Cannot find cpplint executable")
+    endif()
+
+    file(GLOB_RECURSE
+         FILES_TO_CHECK
+         src/*.*
+         include/*.*)
+
+    add_custom_target(${CPPCHECK_TARGET}
+        COMMAND ${CPPLINT} ${FILES_TO_CHECK}
+        DEPENDS ${FILES_TO_CHECK}
+        COMMENT "cpplint checking")
+endif()
+

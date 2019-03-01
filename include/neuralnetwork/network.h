@@ -1,9 +1,20 @@
+/*
+ * Copyright 2019, Peter Han, All rights reserved.
+ * This code is released into the public domain.
+ *
+ * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND,
+ * EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF
+ * MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT.
+ * IN NO EVENT SHALL THE AUTHORS BE LIABLE FOR ANY CLAIM, DAMAGES OR
+ * OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE,
+ * ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR
+ * OTHER DEALINGS IN THE SOFTWARE.
+ */
 #pragma once
-#include <memory>
-
-// cu
 #include <cublas_v2.h>
 #include <cudnn.h>
+
+#include <memory>
 
 namespace nn {
 using std::shared_ptr;
@@ -75,7 +86,7 @@ class Network {
      *
      * @param[in] inc increment GPU memory in byte
      */
-    virtual void updateMemoryNeeded(long inc) const = 0;
+    virtual void updateMemoryNeeded(size_t inc) const = 0;
 
     /**
      * get solver setting

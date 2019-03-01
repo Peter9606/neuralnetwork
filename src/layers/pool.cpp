@@ -1,8 +1,20 @@
+/*
+ * Copyright 2019, Peter Han, All rights reserved.
+ * This code is released into the public domain.
+ *
+ * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND,
+ * EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF
+ * MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT.
+ * IN NO EVENT SHALL THE AUTHORS BE LIABLE FOR ANY CLAIM, DAMAGES OR
+ * OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE,
+ * ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR
+ * OTHER DEALINGS IN THE SOFTWARE.
+ */
 #include <cassert>
 #include <map>
 
-#include "error_check.h"
-#include "layers/pool.h"
+#include "neuralnetwork/error_check.h"
+#include "neuralnetwork/layers/pool.h"
 
 namespace {
 using nn::layers::Pool;
@@ -25,9 +37,7 @@ Pool::Pool(const std::string& name,
     , window_(window)
     , pad_(pad)
     , stride_(stride)
-    , type_(type)
-
-{
+    , type_(type) {
     checkCUDNN(cudnnCreatePoolingDescriptor(&pool_desc_));
     checkCUDNN(cudnnSetPooling2dDescriptor(pool_desc_,
                                            ::MODE[type_],
@@ -53,9 +63,7 @@ Pool::Pool(const std::string& name,
            const Window& window,
            const Stride& stride,
            Type type)
-    : Pool(name, network, up, window, stride, {0, 0}, type)
-
-{
+    : Pool(name, network, up, window, stride, {0, 0}, type) {
 }
 
 Pool::~Pool() {
