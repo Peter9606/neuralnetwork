@@ -122,6 +122,7 @@ void Activation::bwdPropagation() {
     float* d_dx                    = up->getGradient();
 
     if (!d_dx) {
+        log_->trace("{} bwdPropagation shortcut as no upstream", name_);
         return;
     }
     checkCUDNN(cudnnActivationBackward(cudnn_handle,

@@ -4,30 +4,6 @@
 #include "error_check.h"
 #include "layers/softmax.h"
 
-namespace {
-void dump(float* filters, int bs) {
-    std::vector<float> f(10 * bs);
-    cudaMemcpy(
-        &f.data()[0], filters, 10 * bs * sizeof(float), cudaMemcpyDeviceToHost);
-    for (int j = 0; j < bs; j++) {
-        for (int i = 0; i < 10; ++i) {
-            std::cout << f[j * 10 + i] << " ";
-        }
-        std::cout << std::endl;
-    }
-    std::cout << std::endl;
-}
-void dump(float* filters) {
-    std::vector<float> f(10);
-    cudaMemcpy(
-        &f.data()[0], filters, 10 * sizeof(float), cudaMemcpyDeviceToHost);
-    for (int i = 0; i < 10; ++i) {
-        std::cout << f[i] << " ";
-    }
-    std::cout << std::endl;
-}
-}  // namespace
-
 namespace nn {
 namespace layers {
 Softmax::Softmax(const std::string& name,
@@ -108,9 +84,6 @@ void Softmax::fwdPropagation() {
                                    beta,
                                    y_desc_,
                                    d_y_));
-    // std::cout << "d_y_ after softmax forward" << std::endl;
-    // dump(d_y_, n_);
-    // std::cout << "----------" << std::endl;
 }
 
 void Softmax::bwdPropagation() {
@@ -119,34 +92,28 @@ void Softmax::bwdPropagation() {
     LayerConstPtr up = up_.lock();
     assert(("Upstream is expired", up));
 
-    cudnnHandle_t cudnn_handle = nn->getCudnnHandle();
-    // const float* alpha             = nn->getAlpha();
-    // const float* beta              = nn->getBeta();
-    float alpha                    = 1.0f;
-    float beta                     = 0.0f;
+    cudnnHandle_t cudnn_handle     = nn->getCudnnHandle();
+    const float* alpha             = nn->getAlpha();
+    const float* beta              = nn->getBeta();
     cudnnTensorDescriptor_t x_desc = up->getDescriptor();
     float* d_dx                    = up->getGradient();
 
     if (!d_dx) {
+        log_->trace("{} bwdPropagation shortcut as no upstream", name_);
         return;
     }
-    // std::cout << "d_dy_ SOFTMAX" << std::endl;
-    // dump(d_dy_, n_);
-    // std::cout << "d_dx before update SOFTMAX" << std::endl;
-    // dump(d_dx);
+
     checkCUDNN(cudnnSoftmaxBackward(cudnn_handle,
                                     CUDNN_SOFTMAX_ACCURATE,
                                     CUDNN_SOFTMAX_MODE_CHANNEL,
-                                    &alpha,
+                                    alpha,
                                     y_desc_,
                                     d_y_,
                                     y_desc_,
                                     d_dy_,
-                                    &beta,
+                                    beta,
                                     x_desc,
                                     d_dx));
-    // std::cout << "d_dx after update SOFTMAX" << std::endl;
-    // dump(d_dx);
 }
 
 cudnnTensorDescriptor_t Softmax::getDescriptor() const {

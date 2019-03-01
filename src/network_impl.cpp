@@ -26,43 +26,23 @@
 
 using nn::layers::Activation;
 using nn::layers::Conv;
+using nn::layers::Dilation;
+using nn::layers::Dropout;
 using nn::layers::FC;
 using nn::layers::Input;
-using nn::layers::Pool;
-using nn::layers::Softmax;
-// using nn::layers::Dropout;
-// using nn::layers::Unpool;
-using nn::layers::Dilation;
 using nn::layers::Kernel;
 using nn::layers::Pad;
+using nn::layers::Pool;
+using nn::layers::Softmax;
 using nn::layers::Stride;
+using nn::layers::Unpool;
 using nn::layers::Window;
-using std::cout;
-using std::endl;
 using std::make_shared;
 using std::shared_ptr;
 using std::vector;
 using std::chrono::duration_cast;
 using std::chrono::high_resolution_clock;
 using std::chrono::microseconds;
-
-namespace {
-void dump(int batch_size, float *h_data, float *h_label) {
-    cout << endl << endl;
-    for (int i = 0; i < batch_size; i++) {
-        cout << "Image[" << i << "]=" << h_label[i] << endl;
-        for (int x = 0; x < 28; x++) {
-            for (int y = 0; y < 28; y++) {
-                cout << std::setprecision(2) << std::setw(5)
-                     << h_data[i * 28 * 28 + x * 28 + y];
-            }
-            cout << endl;
-        }
-        cout << endl;
-    }
-    cout << endl;
-}
-}  // namespace
 
 namespace nn {
 NetworkImpl::NetworkImpl(int batch_size)
@@ -98,12 +78,14 @@ NetworkImpl::~NetworkImpl() {
 
 void NetworkImpl::train(shared_ptr<vector<float>> &h_data,
                         shared_ptr<vector<float>> &h_label) const {
+    size_t malloced_size = 0;
     for (auto &&l : layers_) {
-        l->prepareFwdPropagation();
-        l->prepareBwdPropagation();
+        malloced_size += l->prepareFwdPropagation();
+        malloced_size += l->prepareBwdPropagation();
         l->loadParameters(nullptr);
     }
-
+    log_->info("Malloced device {}KB", malloced_size / 1024);
+    log_->info("Need workspace {}KB", workspace_size_ / 1024);
     checkCudaErrors(
         cudaMalloc(&d_workspace_, workspace_size_));  // TODO(Peter Han): move
                                                       // to somewhere good
@@ -141,8 +123,6 @@ void NetworkImpl::train(shared_ptr<vector<float>> &h_data,
         checkCudaErrors(cudaDeviceSynchronize());
 
         if (iter % 200 == 0) {
-            cout << "iter=" << iter << ">>>>>>>>>>>>>>>>>>>>>>>>>>>>" << endl;
-
             std::vector<float> output(10 * batch_size_);
             std::vector<float> gradient(10 * batch_size_);
             std::vector<float> fcoutput(10 * batch_size_);
@@ -171,13 +151,6 @@ void NetworkImpl::train(shared_ptr<vector<float>> &h_data,
                                             cudaMemcpyDeviceToHost));
             int num_errors = 0;
             for (int i = 0; i < batch_size_; i++) {
-                /*
-                                dump(1,
-                                     &h_data->data()[(imageid * batch_size_ + i)
-                   * dim_first.c * dim_first.h * dim_first.w],
-                                     &h_label->data()[imageid * batch_size_ +
-                   i]);
-                */
                 // Determine classification according to maximal response
                 int base   = i * 10;
                 int chosen = 0;
@@ -187,46 +160,19 @@ void NetworkImpl::train(shared_ptr<vector<float>> &h_data,
                         chosen = id;
                     }
                 }
-                /*
-                                std::cout << " Softmax output: ";
-                                for (int id = 0; id < 10; ++id) {
-                                    if (output[base + chosen] < output[base +
-                   id]) { chosen = id;
-                                    }
-                                    cout << std::setprecision(3) << output[base
-                   + id] << " ";
-                                }
-                                std::cout << endl;
-                                std::cout << " Softmax gradie: ";
-                                for (int id = 0; id < 10; ++id) {
-                                    cout << std::setprecision(3) <<
-                   gradient[base + id] << " ";
-                                }
-                                std::cout << endl;
-                                std::cout << " FC      output: ";
-                                for (int id = 0; id < 10; ++id) {
-                                    cout << std::setprecision(3) <<
-                   fcoutput[base + id] << " ";
-                                }
-                                std::cout << endl;
-                                cout << " ";
-                */
                 if (chosen != h_label->at(imageid * batch_size_ + i))
                     ++num_errors;
-
-                // cout << "chosen= " << chosen << " grand true="
-                //     << h_label->data()[imageid * batch_size_ + i] << endl;
             }
             float err = (float)num_errors / (float)batch_size_;
-            cout << "Error rates: " << err * 100.0f << "%" << endl;
+            log_->info("Iter: {}, Error rates: {}", iter, err * 100.0f);
         }
     }
     checkCudaErrors(cudaDeviceSynchronize());
     auto t2 = high_resolution_clock::now();
 
-    cout << "Iteration time:"
-         << duration_cast<microseconds>(t2 - t1).count() / 1000.0f / total_iter
-         << endl;
+    log_->info("Iteration time: {}",
+               duration_cast<microseconds>(t2 - t1).count() / 1000.0f /
+                   total_iter);
 }
 
 void NetworkImpl::fwdPropagation(const float *d_data) const {
@@ -260,51 +206,6 @@ void NetworkImpl::computeLoss(const float *d_label) const {
     const size_t size     = sizeof(float) * dim.c * dim.h * dim.w * batch_size_;
     const float *d_result = last->getTensor();
     float *d_loss         = last->getGradient();
-
-    /*
-    // let's use cpu to calculate loss
-    checkCudaErrors(
-        cudaMemcpyAsync(d_loss, d_result, size, cudaMemcpyDeviceToDevice));
-    vector<float> loss(dim.c * dim.w * dim.h * batch_size_);
-    checkCudaErrors(cudaMemcpyAsync(loss.data(),
-                                    d_loss,
-                                    sizeof(float) * loss.size(),
-                                    cudaMemcpyDeviceToHost));
-    vector<float> label(batch_size_);
-    checkCudaErrors(cudaMemcpyAsync(label.data(),
-                                    d_label,
-                                    sizeof(float) * label.size(),
-                                    cudaMemcpyDeviceToHost));
-    cudaDeviceSynchronize();
-        cout << "before -1 " << endl;
-        for (auto item : loss) {
-            cout << item << " ";
-        }
-        cout << endl;
-        cout << " label ";
-        for (auto l : label) {
-            cout << l << " ";
-        }
-        cout << endl;
-        cout << endl;
-        for (int i = 0; i < batch_size_; ++i) {
-            int idx = static_cast<int>(label[i]);
-            cout << " should cut " << i * 10 + idx << " with 1" << endl;
-            cout << " The loss[" << i * 10 + idx << "]=" << loss[i * 10 + idx]
-                 << endl;
-            loss[i * 10 + idx] -= 1.0;
-            cout << " The loss[" << i * 10 + idx << "]=" << loss[i * 10 + idx]
-                 << endl;
-        }
-        cout << "after -1 " << endl;
-        for (auto item : loss) {
-            cout << item << " ";
-        }
-    checkCudaErrors(cudaMemcpy(d_loss,
-                               loss.data(),
-                               sizeof(float) * loss.size(),
-                               cudaMemcpyHostToDevice));
-    */
 
     checkCudaErrors(
         cudaMemcpyAsync(d_loss, d_result, size, cudaMemcpyDeviceToDevice));
@@ -406,10 +307,6 @@ const float *NetworkImpl::getBeta() const {
     return &beta_;
 }
 
-void NetworkImpl::setWorkspaceSize(size_t size) const {
-    workspace_size_ = size;
-}
-
 size_t NetworkImpl::getWorkspaceSize() const {
     return workspace_size_;
 }
@@ -419,6 +316,7 @@ float *NetworkImpl::getWorkspace() const {
 }
 
 void NetworkImpl::updateWorkspaceSize(size_t size) const {
+    log_->trace("{}[{}]", __FUNCTION__, size);
     if (size < workspace_size_) {
         return;
     }

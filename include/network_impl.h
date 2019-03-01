@@ -4,6 +4,7 @@
 
 // self
 #include "layer.h"
+#include "logger.h"
 #include "network.h"
 
 using std::shared_ptr;
@@ -94,13 +95,6 @@ class NetworkImpl : public Network,
     const float* getBeta() const final;
 
     /**
-     * set workspace size
-     *
-     * @param[in] size workspace size in bytes
-     */
-    virtual void setWorkspaceSize(size_t size) const;
-
-    /**
      * @brief update workspace size
      * According to CUDNN guide, convolution forward and backward
      * API need an unidifed workspace size which should be big
@@ -153,8 +147,9 @@ class NetworkImpl : public Network,
     void updateWeights() const;
 
  private:
-    float alpha_ = 1.0f;
-    float beta_  = 0.0f;
+    shared_ptr<logger> log_ = Logger::getLogger();
+    float alpha_            = 1.0f;
+    float beta_             = 0.0f;
     const int batch_size_;
     Dim dim_;
     SolverSetting solver_setting_;
@@ -164,8 +159,8 @@ class NetworkImpl : public Network,
     cudnnHandle_t cudnn_handle_;
     cublasHandle_t cublas_handle_;
 
-    mutable size_t workspace_size_;
-    mutable float* d_workspace_ = nullptr;
+    mutable size_t workspace_size_ = 0;
+    mutable float* d_workspace_    = nullptr;
     vector<shared_ptr<Layer>> layers_;
 };  // namespace nn
 }  // namespace nn

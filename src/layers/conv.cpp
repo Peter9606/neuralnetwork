@@ -294,6 +294,7 @@ void Conv::bwdPropagation() {
                                               d_dfilter_));
 
     if (!d_dx) {
+        log_->trace("{} bwdPropagation shortcut as no upstream", name_);
         return;
     }
     checkCUDNN(cudnnConvolutionBackwardData(cudnn_handle,
@@ -311,26 +312,6 @@ void Conv::bwdPropagation() {
                                             d_dx));
 }
 
-namespace {
-void dump(float* filters, size_t count) {
-    return;
-    std::vector<float> f(count * 5 * 5);
-    cudaMemcpy(&f.data()[0],
-               filters,
-               count * 5 * 5 * sizeof(float),
-               cudaMemcpyDeviceToHost);
-    for (int i = 0; i < count; ++i) {
-        for (int x = 0; x < 5; x++) {
-            for (int y = 0; y < 5; y++) {
-                std::cout << f[i * 5 * 5 + x * 5 + y] << " ";
-            }
-            std::cout << std::endl;
-        }
-        std::cout << std::endl;
-    }
-}
-}  // namespace
-
 void Conv::updateWeights() {
     NetworkConstPtr nn = network_.lock();
     assert(("Network is expired", nn));
@@ -346,10 +327,6 @@ void Conv::updateWeights() {
 
     cublasHandle_t cublas_handle = nn->getCublasHandle();
 
-    // std::cout << "gradient ---- " << std::endl;
-    dump(d_dfilter_, 4);
-    // std::cout << "before update ---- " << std::endl;
-    dump(d_filter_, 4);
     checkCudaErrors(cublasSaxpy(cublas_handle,
                                 static_cast<int>(filter_size),
                                 &learning_rate,
@@ -366,8 +343,6 @@ void Conv::updateWeights() {
                                 1));
 
     checkCudaErrors(cudaDeviceSynchronize());
-    // std::cout << "after update ---- " << std::endl;
-    dump(d_filter_, 4);
 }
 
 cudnnTensorDescriptor_t Conv::getDescriptor() const {

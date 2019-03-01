@@ -26,7 +26,10 @@ __global__ void SoftmaxLoss(const float *label,
     diff[idx * num_labels + label_value] -= 1.0f;
 }
 
-unsigned int RoundUp(unsigned int nominator, unsigned int denominator) {
+/**
+ * Computes ceil(x / y) for integral nonnegative values.
+ */
+static unsigned int RoundUp(unsigned int nominator, unsigned int denominator) {
     return (nominator + denominator - 1) / denominator;
 }
 
