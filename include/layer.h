@@ -9,6 +9,7 @@
 #include <cudnn.h>
 
 // self
+#include "logger.h"
 #include "network.h"
 
 namespace nn {
@@ -156,6 +157,7 @@ class Layer : public std::enable_shared_from_this<Layer> {
     virtual float* getGradient() const;
 
  protected:
+    const std::shared_ptr<logger> log_ = Logger::getLogger();
     const std::string name_;
     const weak_ptr<Network const> network_;
     const weak_ptr<Layer const> up_;

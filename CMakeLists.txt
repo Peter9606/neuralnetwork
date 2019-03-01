@@ -35,10 +35,13 @@ include_directories(${CUDA_INCLUDE_DIRS})
 include_directories(${CUDNN_INCLUDE_DIRS})
 link_directories(${CUDNN_LIBRARY})
 
+include_directories(${CMAKE_CURRENT_SOURCE_DIR}/3rdparty)
+
 # nn library
 include_directories(include)
 cuda_add_library(${PROJECT_NAME} SHARED
     src/network_impl.cpp
+    src/logger.cpp
     src/layer.cpp
     src/layers/activation.cpp
     src/layers/conv.cpp

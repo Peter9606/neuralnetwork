@@ -10,6 +10,7 @@ Layer::Layer(const std::string& name,
     , network_(network)
     , up_(up)
     , n_(network->getBatchSize()) {
+    log_->info("Layer {} is being created", name_);
     /**
      * A principle for create and set various types of descriptor and malloc
      * memory on GPU:

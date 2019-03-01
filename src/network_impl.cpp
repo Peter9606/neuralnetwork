@@ -113,7 +113,7 @@ void NetworkImpl::train(shared_ptr<vector<float>> &h_data,
 
     const size_t train_size = h_label->size();
 
-    const int total_iter = 500000;
+    const int total_iter = 200000;
     for (int iter = 0; iter < total_iter; ++iter) {
         int imageid = iter % (train_size / batch_size_);
 
@@ -331,7 +331,7 @@ void NetworkImpl::buildNetwork() {
     auto input = make_shared<Input>("Input", shared_from_this(), 1, 28, 28);
     layers_.push_back(input);
 
-    Kernel kernel = {5, 5, 20};
+    Kernel kernel = {3, 3, 20};
     auto conv1 = make_shared<Conv>("Conv1", shared_from_this(), input, kernel);
     layers_.push_back(conv1);
 
@@ -341,15 +341,27 @@ void NetworkImpl::buildNetwork() {
         "MaxPool1", shared_from_this(), conv1, window, stride, Pool::MAX);
     layers_.push_back(pool1);
 
-    kernel     = {5, 5, 50};
-    auto conv2 = make_shared<Conv>("Conv2", shared_from_this(), pool1, kernel);
-    layers_.push_back(conv2);
+    kernel = {3, 3, 50};
+    auto conv2_1 =
+        make_shared<Conv>("Conv2-1", shared_from_this(), pool1, kernel);
+    layers_.push_back(conv2_1);
+    auto conv2_2 =
+        make_shared<Conv>("Conv2-2", shared_from_this(), conv2_1, kernel);
+    layers_.push_back(conv2_2);
 
     auto pool2 = make_shared<Pool>(
-        "MaxPool2", shared_from_this(), conv2, window, stride, Pool::MAX);
+        "MaxPool2", shared_from_this(), conv2_2, window, stride, Pool::MAX);
     layers_.push_back(pool2);
 
-    auto fc1 = make_shared<FC>("FC1", shared_from_this(), pool2, 500);
+    kernel     = {3, 3, 50};
+    auto conv3 = make_shared<Conv>("Conv3", shared_from_this(), pool2, kernel);
+    layers_.push_back(conv3);
+
+    auto pool3 = make_shared<Pool>(
+        "MaxPool3", shared_from_this(), conv3, window, stride, Pool::MAX);
+    layers_.push_back(pool3);
+
+    auto fc1 = make_shared<FC>("FC1", shared_from_this(), pool3, 500);
     layers_.push_back(fc1);
 
     auto relu1 = make_shared<Activation>("FC1Relu", shared_from_this(), fc1);
