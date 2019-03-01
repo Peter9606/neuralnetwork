@@ -10,7 +10,8 @@ using std::shared_ptr;
 using std::vector;
 
 namespace nn {
-class NetworkImpl : public Network, std::enable_shared_from_this<NetworkImpl> {
+class NetworkImpl : public Network,
+                    public std::enable_shared_from_this<NetworkImpl> {
  public:
     /**
      * Constructor build a Network object
@@ -24,6 +25,12 @@ class NetworkImpl : public Network, std::enable_shared_from_this<NetworkImpl> {
                 Dim dim,
                 const SolverSetting& solver_setting,
                 LossType loss_type);
+    /**
+     * Constructor build a Network object
+     *
+     * @param[in] batch_size  batch size
+     */
+    NetworkImpl(int batch_size);
 
     /**
      * destructor
@@ -87,18 +94,29 @@ class NetworkImpl : public Network, std::enable_shared_from_this<NetworkImpl> {
     const float* getBeta() const final;
 
     /**
-     * get workspace size
-     *
-     * @return workspace size in bytes
-     */
-    virtual size_t getWorkspaceSize() const;
-
-    /**
      * set workspace size
      *
      * @param[in] size workspace size in bytes
      */
     virtual void setWorkspaceSize(size_t size) const;
+
+    /**
+     * @brief update workspace size
+     * According to CUDNN guide, convolution forward and backward
+     * API need an unidifed workspace size which should be big
+     * enough for all conv layers. So each layer calling this API to
+     * notify its size to Network.
+     *
+     * @param[in] size workspace size in bytes
+     */
+    virtual void updateWorkspaceSize(size_t size) const;
+
+    /**
+     * get workspace size
+     *
+     * @return workspace size in bytes
+     */
+    virtual size_t getWorkspaceSize() const;
 
     /**
      * get workspace
@@ -120,13 +138,9 @@ class NetworkImpl : public Network, std::enable_shared_from_this<NetworkImpl> {
      * @brief compute loss
      * Concrate network should have have implementation
      *
-     * @param[in]       d_result    last layer's output
      * @param[in]       d_label     label data in device
-     * @param[in/out]   d_lost      last layer's differential
      */
-    virtual void computeLoss(const float* d_result,
-                             const float* d_label,
-                             float* d_lost) const;
+    virtual void computeLoss(const float* d_label) const;
 
     /**
      * @brief construct network topology
@@ -142,16 +156,16 @@ class NetworkImpl : public Network, std::enable_shared_from_this<NetworkImpl> {
     float alpha_ = 1.0f;
     float beta_  = 0.0f;
     const int batch_size_;
-    const Dim dim_;
-    const SolverSetting solver_setting_;
-    const LossType loss_type_;
+    Dim dim_;
+    SolverSetting solver_setting_;
+    LossType loss_type_;
     mutable long memory_needed_ = 0;
 
     cudnnHandle_t cudnn_handle_;
     cublasHandle_t cublas_handle_;
 
     mutable size_t workspace_size_;
-    float* d_workspace_ = nullptr;
+    mutable float* d_workspace_ = nullptr;
     vector<shared_ptr<Layer>> layers_;
 };  // namespace nn
 }  // namespace nn

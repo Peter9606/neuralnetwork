@@ -56,11 +56,6 @@ class Softmax : public Layer {
     void bwdPropagation() final;
 
     /**
-     * update weights
-     */
-    void updateWeights() final;
-
-    /**
      * get output tensor descriptor
      *
      * @return output tensor descriptor
@@ -75,11 +70,6 @@ class Softmax : public Layer {
     float* getTensor() const;
 
     /**
-     * get output dimension
-     */
-    Dim getDim() const;
-
-    /**
      * get gradient w.r.t current layer's output
      *
      * @return gradient
@@ -89,9 +79,9 @@ class Softmax : public Layer {
  private:
     const bool in_place_;
 
-    cudnnTensorDescriptor_t y_desc_;
-    float* d_y_  = nullptr;
-    float* d_dy_ = nullptr;
+    cudnnTensorDescriptor_t y_desc_ = nullptr;
+    float* d_y_                     = nullptr;
+    float* d_dy_                    = nullptr;
 };
 
 }  // namespace layers

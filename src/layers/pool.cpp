@@ -22,7 +22,7 @@ Pool::Pool(const std::string& name,
            const Pad& pad,
            Type type)
     : Layer(name, network, up)
-    , window_(window_)
+    , window_(window)
     , pad_(pad)
     , stride_(stride)
     , type_(type)
@@ -38,8 +38,13 @@ Pool::Pool(const std::string& name,
                                            pad_.horizontal,
                                            stride_.vertical,
                                            stride_.horizontal));
+
     checkCUDNN(cudnnGetPooling2dForwardOutputDim(
         pool_desc_, up->getDescriptor(), &n_, &c_, &h_, &w_));
+
+    checkCUDNN(cudnnCreateTensorDescriptor(&y_desc_));
+    checkCUDNN(cudnnSetTensor4dDescriptor(
+        y_desc_, CUDNN_TENSOR_NCHW, CUDNN_DATA_FLOAT, n_, c_, h_, w_));
 }
 
 Pool::Pool(const std::string& name,
@@ -61,18 +66,14 @@ Pool::~Pool() {
 }
 
 size_t Pool::prepareFwdPropagation() {
-    checkCUDNN(cudnnCreateTensorDescriptor(&y_desc_));
-    checkCUDNN(cudnnSetTensor4dDescriptor(
-        y_desc_, CUDNN_TENSOR_NCHW, CUDNN_DATA_FLOAT, n_, c_, h_, w_));
-
-    const size_t output_size = n_ * c_ * h_ * w_;
+    const size_t output_size = n_ * c_ * h_ * w_ * sizeof(float);
     checkCudaErrors(cudaMalloc(&d_y_, output_size));
 
     return output_size;
 }
 
 size_t Pool::prepareBwdPropagation() {
-    const size_t output_size = n_ * c_ * h_ * w_;
+    const size_t output_size = n_ * c_ * h_ * w_ * sizeof(float);
     checkCudaErrors(cudaMalloc(&d_dy_, output_size));
 
     return output_size;

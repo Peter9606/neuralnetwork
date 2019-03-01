@@ -44,34 +44,31 @@ enum SolverType {
 struct SolverSetting {
     float learning_rate;
     SolverType type;
-    union {
-        Adam adam;
-        Msgd msgd;
-    } setting;
+    /*
+        union {
+            Adam adam;
+            Msgd msgd;
+        } setting;
+    */
 };
 
 /** @enum LossType
  */
 enum LossType {
-    CORSS_ENTROPY = 0,  // for classification mainly
+    CROSS_ENTROPY = 0,  // for classification mainly
     COMPOSITIONAL
 };
 
 class Network {
  public:
+    virtual ~Network() = default;
+
     /**
      * get batch size
      *
      * @return batch size
      */
     virtual int getBatchSize() const = 0;
-
-    /**
-     * get if inference only
-     *
-     * @return true if inference only, false otherwise
-     */
-    virtual bool isInferenceOnly() const = 0;
 
     /**
      * update total GPU memory needed by this network

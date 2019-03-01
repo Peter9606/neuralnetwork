@@ -5,16 +5,13 @@
 // self
 #include "layer.h"
 
-namespace nn
-{
-namespace layers
-{
+namespace nn {
+namespace layers {
 /** @class FC
  * @brief Fully Connect layer
  */
-class FC : public Layer
-{
-public:
+class FC : public Layer {
+ public:
     /**
      * FC constructor
      *
@@ -96,25 +93,18 @@ public:
     float* getTensor() const;
 
     /**
-     * get output dimension
-     *
-     * @return dim of output tensor { output_size_, 1, 1 }
-     */
-    Dim getDim() const;
-
-    /**
      * get gradient w.r.t current layer's output
      *
      * @return graident
      */
     float* getGradient() const;
 
-private:
+ private:
     const int input_length_;
     const int output_length_;
 
-    cudnnTensorDescriptor_t y_desc_;
-    cudnnTensorDescriptor_t bias_desc_;
+    cudnnTensorDescriptor_t y_desc_    = nullptr;
+    cudnnTensorDescriptor_t bias_desc_ = nullptr;
 
     float* d_weight_     = nullptr;
     float* d_bias_       = nullptr;
