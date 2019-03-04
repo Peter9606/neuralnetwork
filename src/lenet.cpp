@@ -53,7 +53,7 @@ using std::chrono::microseconds;
 
 namespace nn {
 LeNet::LeNet(int batch_size)
-    : NetworkImpl(batch_size, {1, 28, 28}, {0.001, SGD}, CROSS_ENTROPY) {
+    : NetworkImpl(batch_size, {1, 28, 28}, {SGD}, CROSS_ENTROPY) {
 }
 
 LeNet::~LeNet() {
@@ -89,6 +89,7 @@ void LeNet::train(const shared_ptr<vector<float>> &h_data,
         checkCudaErrors(cudaDeviceSynchronize());
         fwdPropagation(d_data);
         bwdPropagation(d_label);
+        updateLearningRate(iter);
         updateWeights();
 
         if (iter % 200 == 0) {
@@ -165,43 +166,29 @@ void LeNet::computeLoss(const float *d_label) const {
                                 1));
 }
 
-// TODO(Peter Han): This should be implemented in sub-class
-// but, for temporary solution, LeNet5 is build. Should remove in future
 void LeNet::buildNetwork() {
     auto input = make_shared<Input>("Input", shared_from_this(), 1, 28, 28);
     layers_.push_back(input);
 
-    Kernel kernel = {3, 3, 20};
+    Kernel kernel = {5, 5, 20};
     auto conv1 = make_shared<Conv>("Conv1", shared_from_this(), input, kernel);
     layers_.push_back(conv1);
 
     Window window = {2, 2};
     Stride stride = {2, 2};
     auto pool1    = make_shared<Pool>(
-        "MaxPool1", shared_from_this(), conv1, window, stride, Pool::MAX);
+        "Pool1", shared_from_this(), conv1, window, stride, Pool::MAX);
     layers_.push_back(pool1);
 
-    kernel = {3, 3, 50};
-    auto conv2_1 =
-        make_shared<Conv>("Conv2-1", shared_from_this(), pool1, kernel);
-    layers_.push_back(conv2_1);
-    auto conv2_2 =
-        make_shared<Conv>("Conv2-2", shared_from_this(), conv2_1, kernel);
-    layers_.push_back(conv2_2);
+    kernel     = {5, 5, 50};
+    auto conv2 = make_shared<Conv>("Conv2", shared_from_this(), pool1, kernel);
+    layers_.push_back(conv2);
 
     auto pool2 = make_shared<Pool>(
-        "MaxPool2", shared_from_this(), conv2_2, window, stride, Pool::MAX);
+        "Pool2", shared_from_this(), conv2, window, stride, Pool::MAX);
     layers_.push_back(pool2);
 
-    kernel     = {3, 3, 50};
-    auto conv3 = make_shared<Conv>("Conv3", shared_from_this(), pool2, kernel);
-    layers_.push_back(conv3);
-
-    auto pool3 = make_shared<Pool>(
-        "MaxPool3", shared_from_this(), conv3, window, stride, Pool::MAX);
-    layers_.push_back(pool3);
-
-    auto fc1 = make_shared<FC>("FC1", shared_from_this(), pool3, 500);
+    auto fc1 = make_shared<FC>("FC1", shared_from_this(), pool2, 500);
     layers_.push_back(fc1);
 
     auto relu1 = make_shared<Activation>("FC1Relu", shared_from_this(), fc1);
@@ -212,6 +199,15 @@ void LeNet::buildNetwork() {
 
     auto softmax = make_shared<Softmax>("Softmax", shared_from_this(), fc2);
     layers_.push_back(softmax);
+}
+
+void LeNet::updateLearningRate(int iter) const {
+    const static float kBASE  = 0.01f;
+    const static float kGAMMA = 0.0001f;
+    const static float kPOWER = 0.75f;
+
+    learning_rate_ =
+        static_cast<float>(kBASE * pow((1.0 + kGAMMA * iter), (-kPOWER)));
 }
 }  // namespace nn
 

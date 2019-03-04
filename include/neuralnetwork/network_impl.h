@@ -66,11 +66,11 @@ class NetworkImpl : public Network,
     void updateMemoryNeeded(size_t inc) const final;
 
     /**
-     * get solver setting
+     * get learning rate
      *
-     * @return solver setting
+     * @return learning rate
      */
-    SolverSetting getSolverSetting() const final;
+    float getLearningRate() const final;
 
     /**
      * get loss calculation method
@@ -191,6 +191,7 @@ class NetworkImpl : public Network,
     float beta_             = 0.0f;
     Dim dim_;
     SolverSetting solver_setting_;
+    mutable float learning_rate_;
     LossType loss_type_;
 
     cudnnHandle_t cudnn_handle_    = nullptr;
