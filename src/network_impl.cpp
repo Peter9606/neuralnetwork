@@ -17,6 +17,7 @@
 #include <iomanip>
 #include <iostream>
 #include <memory>
+#include <sstream>
 #include <vector>
 
 #include "neuralnetwork/error_check.h"
@@ -46,11 +47,32 @@ using nn::layers::Stride;
 using nn::layers::Unpool;
 using nn::layers::Window;
 using std::make_shared;
+using std::setprecision;
 using std::shared_ptr;
+using std::stringstream;
 using std::vector;
 using std::chrono::duration_cast;
 using std::chrono::high_resolution_clock;
 using std::chrono::microseconds;
+
+namespace nn {
+const std::string readableSize(size_t s) {
+    constexpr static size_t KB = 1024;
+    constexpr static size_t MB = 1024 * KB;
+    constexpr static size_t GB = 1024 * MB;
+    stringstream ss;
+    if (s < KB) {
+        ss << s << "B";
+    } else if (s < MB) {
+        ss << setprecision(3) << static_cast<float>(s) / KB << "KB";
+    } else if (s < GB) {
+        ss << setprecision(3) << static_cast<float>(s) / MB << "MB";
+    } else {
+        ss << setprecision(3) << static_cast<float>(s) / GB << "GB";
+    }
+    return ss.str();
+}
+}  // namespace nn
 
 namespace nn {
 NetworkImpl::NetworkImpl(int batch_size)
@@ -83,102 +105,27 @@ NetworkImpl::~NetworkImpl() {
     checkCudaErrors(cudaFree(d_workspace_));
 }
 
-void NetworkImpl::train(const shared_ptr<vector<float>> &h_data,
-                        const shared_ptr<vector<float>> &h_label) const {
+void NetworkImpl::prepareTraining() const {
     size_t malloced_size = 0;
     for (auto &&l : layers_) {
         malloced_size += l->prepareFwdPropagation();
         malloced_size += l->prepareBwdPropagation();
         l->loadParameters(nullptr);
     }
-    log_->info("Malloced device {}KB", malloced_size / 1024);
-    log_->info("Need workspace {}KB", workspace_size_ / 1024);
-    checkCudaErrors(
-        cudaMalloc(&d_workspace_, workspace_size_));  // TODO(Peter Han): move
-                                                      // to somewhere good
+    log_->info("Malloced device memory {}", readableSize(malloced_size));
+    log_->info("Need workspace memory {}", readableSize(workspace_size_));
+    checkCudaErrors(cudaMalloc(&d_workspace_, workspace_size_));
+}
 
-    checkCudaErrors(cudaDeviceSynchronize());
-    auto t1 = high_resolution_clock::now();
-
-    const size_t train_size = h_label->size();
-
-    const int total_iter = 200000;
-    for (int iter = 0; iter < total_iter; ++iter) {
-        int imageid = iter % (train_size / batch_size_);
-
-        // Prepare current batch on device
-        float *d_data       = layers_[0]->getTensor();
-        const Dim dim_first = layers_[0]->getDim();
-        const size_t data_len =
-            batch_size_ * dim_first.c * dim_first.h * dim_first.w;
-        checkCudaErrors(cudaMemcpyAsync(d_data,
-                                        &h_data->data()[imageid * data_len],
-                                        sizeof(float) * data_len,
-                                        cudaMemcpyHostToDevice));
-
-        float *d_label;
-        checkCudaErrors(cudaMalloc(&d_label, sizeof(float) * batch_size_));
-        checkCudaErrors(cudaMemcpyAsync(d_label,
-                                        &h_label->data()[imageid * batch_size_],
-                                        sizeof(float) * batch_size_,
-                                        cudaMemcpyHostToDevice));
-
-        checkCudaErrors(cudaDeviceSynchronize());
-        fwdPropagation(d_data);
-        bwdPropagation(d_label);
-        updateWeights();
-
-        if (iter % 200 == 0) {
-            std::vector<float> output(10 * batch_size_);
-            std::vector<float> gradient(10 * batch_size_);
-            std::vector<float> fcoutput(10 * batch_size_);
-            auto last         = *(layers_.rbegin());
-            float *d_gradient = last->getGradient();
-            float *d_output   = last->getTensor();
-            float *d_fcoutput = layers_[1]->getTensor();
-
-            checkCudaErrors(cudaMemcpyAsync(&output[0],
-                                            d_output,
-                                            sizeof(float) * output.size(),
-                                            cudaMemcpyDeviceToHost));
-            checkCudaErrors(cudaMemcpyAsync(&gradient[0],
-                                            d_gradient,
-                                            sizeof(float) * gradient.size(),
-                                            cudaMemcpyDeviceToHost));
-            checkCudaErrors(cudaMemcpyAsync(&fcoutput[0],
-                                            d_fcoutput,
-                                            sizeof(float) * fcoutput.size(),
-                                            cudaMemcpyDeviceToHost));
-
-            std::vector<float> grand_truth(batch_size_);
-            checkCudaErrors(cudaMemcpyAsync(&grand_truth[0],
-                                            d_label,
-                                            sizeof(float) * grand_truth.size(),
-                                            cudaMemcpyDeviceToHost));
-            int num_errors = 0;
-            for (int i = 0; i < batch_size_; i++) {
-                // Determine classification according to maximal response
-                int base   = i * 10;
-                int chosen = 0;
-
-                for (int id = 0; id < 10; ++id) {
-                    if (output[base + chosen] < output[base + id]) {
-                        chosen = id;
-                    }
-                }
-                if (chosen != h_label->at(imageid * batch_size_ + i))
-                    ++num_errors;
-            }
-            float err = static_cast<float>(num_errors) / batch_size_;
-            log_->info("Iter: {}, Error rates: {}", iter, err * 100.0f);
-        }
+void NetworkImpl::prepareInference() const {
+    size_t malloced_size = 0;
+    for (auto &&l : layers_) {
+        malloced_size += l->prepareFwdPropagation();
+        l->loadParameters(nullptr);
     }
-    checkCudaErrors(cudaDeviceSynchronize());
-    auto t2 = high_resolution_clock::now();
-
-    log_->info("Iteration time: {}",
-               duration_cast<microseconds>(t2 - t1).count() / 1000.0f /
-                   total_iter);
+    log_->info("Malloced device memory {}", readableSize(malloced_size));
+    log_->info("Need workspace memory {}", readableSize(workspace_size_));
+    checkCudaErrors(cudaMalloc(&d_workspace_, workspace_size_));
 }
 
 void NetworkImpl::fwdPropagation(const float *d_data) const {
@@ -204,81 +151,10 @@ void NetworkImpl::bwdPropagation(const float *d_label) const {
     }
 }
 
-// TODO(Peter Han): let's implement a classifier first
-void NetworkImpl::computeLoss(const float *d_label) const {
-    const float scale      = 1.0f / static_cast<float>(batch_size_);
-    shared_ptr<Layer> last = *(layers_.rbegin());
-    const Dim dim          = last->getDim();
-    const size_t size     = sizeof(float) * dim.c * dim.h * dim.w * batch_size_;
-    const float *d_result = last->getTensor();
-    float *d_loss         = last->getGradient();
-
-    checkCudaErrors(
-        cudaMemcpyAsync(d_loss, d_result, size, cudaMemcpyDeviceToDevice));
-
-    calculateLossWithGpu(d_label, dim.c * dim.h * dim.w, batch_size_, d_loss);
-
-    // Accounting for batch size in SGD
-    checkCudaErrors(cublasSscal(cublas_handle_,
-                                dim.c * dim.h * dim.w * batch_size_,
-                                &scale,
-                                d_loss,
-                                1));
-}
-
 void NetworkImpl::updateWeights() const {
     for (auto &layer : layers_) {
         layer->updateWeights();
     }
-}
-
-// TODO(Peter Han): This should be implemented in sub-class
-// but, for temporary solution, LeNet5 is build. Should remove in future
-void NetworkImpl::buildNetwork() {
-    auto input = make_shared<Input>("Input", shared_from_this(), 1, 28, 28);
-    layers_.push_back(input);
-
-    Kernel kernel = {3, 3, 20};
-    auto conv1 = make_shared<Conv>("Conv1", shared_from_this(), input, kernel);
-    layers_.push_back(conv1);
-
-    Window window = {2, 2};
-    Stride stride = {2, 2};
-    auto pool1    = make_shared<Pool>(
-        "MaxPool1", shared_from_this(), conv1, window, stride, Pool::MAX);
-    layers_.push_back(pool1);
-
-    kernel = {3, 3, 50};
-    auto conv2_1 =
-        make_shared<Conv>("Conv2-1", shared_from_this(), pool1, kernel);
-    layers_.push_back(conv2_1);
-    auto conv2_2 =
-        make_shared<Conv>("Conv2-2", shared_from_this(), conv2_1, kernel);
-    layers_.push_back(conv2_2);
-
-    auto pool2 = make_shared<Pool>(
-        "MaxPool2", shared_from_this(), conv2_2, window, stride, Pool::MAX);
-    layers_.push_back(pool2);
-
-    kernel     = {3, 3, 50};
-    auto conv3 = make_shared<Conv>("Conv3", shared_from_this(), pool2, kernel);
-    layers_.push_back(conv3);
-
-    auto pool3 = make_shared<Pool>(
-        "MaxPool3", shared_from_this(), conv3, window, stride, Pool::MAX);
-    layers_.push_back(pool3);
-
-    auto fc1 = make_shared<FC>("FC1", shared_from_this(), pool3, 500);
-    layers_.push_back(fc1);
-
-    auto relu1 = make_shared<Activation>("FC1Relu", shared_from_this(), fc1);
-    layers_.push_back(relu1);
-
-    auto fc2 = make_shared<FC>("FC2", shared_from_this(), relu1, 10);
-    layers_.push_back(fc2);
-
-    auto softmax = make_shared<Softmax>("Softmax", shared_from_this(), fc2);
-    layers_.push_back(softmax);
 }
 
 int NetworkImpl::getBatchSize() const {

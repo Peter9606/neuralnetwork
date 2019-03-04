@@ -23,6 +23,7 @@ using std::shared_ptr;
 using std::vector;
 
 namespace nn {
+
 class NetworkImpl : public Network,
                     public std::enable_shared_from_this<NetworkImpl> {
  public:
@@ -141,38 +142,62 @@ class NetworkImpl : public Network,
                const shared_ptr<vector<float>>& h_label) const;
 
     /**
+     * @brief construct network topology
+     */
+    virtual void buildNetwork() = 0;
+
+ protected:
+    /**
      * @brief compute loss
      * Concrate network should have have implementation
      *
      * @param[in]       d_label     label data in device
      */
-    virtual void computeLoss(const float* d_label) const;
+    virtual void computeLoss(const float* d_label) const = 0;
 
     /**
-     * @brief construct network topology
+     * @brief prepare training
      */
-    virtual void buildNetwork();
+    virtual void prepareTraining() const;
 
- private:
+    /**
+     * @brief prepare inference
+     */
+    virtual void prepareInference() const;
+
+    /**
+     * @brief execute forward propagation
+     *
+     * @param[in] d_data    pointer to training data on device
+     */
     void fwdPropagation(const float* d_data) const;
+
+    /**
+     * @brief execute forward propagation
+     *
+     * @param[in] d_label   pointer to training label on device
+     */
     void bwdPropagation(const float* d_label) const;
+
+    /**
+     * @brief execute update weight
+     */
     void updateWeights() const;
 
- private:
+ protected:
+    const int batch_size_;
     shared_ptr<logger> log_ = Logger::getLogger();
     float alpha_            = 1.0f;
     float beta_             = 0.0f;
-    const int batch_size_;
     Dim dim_;
     SolverSetting solver_setting_;
     LossType loss_type_;
-    mutable size_t memory_needed_ = 0;
 
-    cudnnHandle_t cudnn_handle_;
-    cublasHandle_t cublas_handle_;
-
+    cudnnHandle_t cudnn_handle_    = nullptr;
+    cublasHandle_t cublas_handle_  = nullptr;
+    mutable size_t memory_needed_  = 0;
     mutable size_t workspace_size_ = 0;
     mutable float* d_workspace_    = nullptr;
     vector<shared_ptr<Layer>> layers_;
-};  // namespace nn
+};
 }  // namespace nn

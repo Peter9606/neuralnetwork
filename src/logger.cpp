@@ -52,8 +52,9 @@ Logger::Logger() try {
 #endif
     sinks.push_back(file_sink);
 
-    logger_ = make_shared<logger>("", sinks.begin(), sinks.end());
+    logger_ = make_shared<logger>("NN FWK", sinks.begin(), sinks.end());
     spdlog::flush_every(std::chrono::seconds(5));
+    spdlog::register_logger(logger_);
 } catch (const spdlog::spdlog_ex ex) {
     std::cout << "Log initialization failed: " << ex.what() << std::endl;
     throw ex;
