@@ -117,11 +117,8 @@
 ///////////////////////////////////////////////////////////////////////////////
 // Uncomment to customize level names (e.g. "MT TRACE")
 //
-#define SPDLOG_LEVEL_NAMES                                           \
-    {                                                                \
-        "NN TRACE", "NN DEBUG", "NN INFO", "NN WARNING", "NN ERROR", \
-            "NN CRITICAL", "OFF"                                     \
-    }
+#define SPDLOG_LEVEL_NAMES \
+    { "TRACE", "DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL", "OFF" }
 ///////////////////////////////////////////////////////////////////////////////
 
 ///////////////////////////////////////////////////////////////////////////////

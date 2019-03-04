@@ -71,11 +71,11 @@ target_link_libraries(${PROJECT_NAME} cudnn)
 target_link_libraries(${PROJECT_NAME} stdc++fs)
 
 #### TEST ####
-cuda_add_executable(test
-    src/main.cpp
+cuda_add_executable(lenet
+    src/lenet.cpp
     src/readubyte.cpp)
 link_directories(${CMAKE_BINARY_DIR})
-target_link_libraries(test ${PROJECT_NAME})
+target_link_libraries(lenet ${PROJECT_NAME})
 
 
 #### STATIC CHECK ####
