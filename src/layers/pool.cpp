@@ -74,17 +74,15 @@ Pool::~Pool() {
 }
 
 size_t Pool::prepareFwdPropagation() {
-    const size_t output_size = n_ * c_ * h_ * w_ * sizeof(float);
-    checkCudaErrors(cudaMalloc(&d_y_, output_size));
+    checkCudaErrors(cudaMalloc(&d_y_, getTensorSizeInBytes()));
 
-    return output_size;
+    return getTensorSizeInBytes();
 }
 
 size_t Pool::prepareBwdPropagation() {
-    const size_t output_size = n_ * c_ * h_ * w_ * sizeof(float);
-    checkCudaErrors(cudaMalloc(&d_dy_, output_size));
+    checkCudaErrors(cudaMalloc(&d_dy_, getTensorSizeInBytes()));
 
-    return output_size;
+    return getTensorSizeInBytes();
 }
 
 void Pool::fwdPropagation() {
@@ -132,18 +130,6 @@ void Pool::bwdPropagation() {
                                     beta,
                                     x_desc,
                                     d_dx));
-}
-
-cudnnTensorDescriptor_t Pool::getDescriptor() const {
-    return y_desc_;
-}
-
-float* Pool::getTensor() const {
-    return d_y_;
-}
-
-float* Pool::getGradient() const {
-    return d_dy_;
 }
 }  // namespace layers
 }  // namespace nn

@@ -128,26 +128,18 @@ class Layer : public std::enable_shared_from_this<Layer> {
     virtual void updateWeights();
 
     /**
-     * get output tensor descriptor
-     *
-     * @return output tensor descriptor
-     */
-    virtual cudnnTensorDescriptor_t getDescriptor() const = 0;
-
-    /**
      * get output tensor
      *
      * @return pointer to output tensor on device
      */
-    virtual float* getTensor() const = 0;
+    virtual float* getTensor() const;
 
     /**
-     * get output dimension
+     * get output tensor descriptor
      *
-     * @return dim of output tensor, in which x, y and z represents height,
-     * width and channel respectively
+     * @return output tensor descriptor
      */
-    virtual Dim getDim() const;
+    virtual cudnnTensorDescriptor_t getDescriptor() const;
 
     /**
      * @brief get graident w.r.t current layer's output
@@ -164,16 +156,51 @@ class Layer : public std::enable_shared_from_this<Layer> {
      */
     virtual float* getGradient() const;
 
+    /**
+     * get output dimension
+     *
+     * @return dim of output tensor, in which x, y and z represents height,
+     * width and channel respectively
+     */
+    virtual Dim getDim() const;
+
+    /**
+     * @brief get output channels
+     * simple return c_
+     *
+     * @return output channel number
+     */
+    int getChannel() const;
+
+    /**
+     * @brief get output size
+     * return the result of c_ * n_ * w_ * h_
+     *
+     * @return the length of output tensor
+     */
+    size_t getTensorSize() const;
+
+    /**
+     * @brief get output size in bytes
+     *
+     * @return the length in bytes of output tensor
+     */
+    size_t getTensorSizeInBytes() const;
+
  protected:
     const std::shared_ptr<logger> log_ = Logger::getLogger();
     const std::string name_;
     const weak_ptr<Network const> network_;
     const weak_ptr<Layer const> up_;
 
-    int n_; /** output image number  */
-    int c_; /** output image channel */
-    int h_; /** output imgae height  */
-    int w_; /** output image width   */
+    cudnnTensorDescriptor_t y_desc_ = nullptr;
+    float* d_y_                     = nullptr;
+    float* d_dy_                    = nullptr;
+
+    int n_ = 0; /** output image number  */
+    int c_ = 0; /** output image channel */
+    int h_ = 0; /** output imgae height  */
+    int w_ = 0; /** output image width   */
 };
 
 using LayerPtr          = shared_ptr<Layer>;

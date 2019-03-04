@@ -23,7 +23,7 @@ FC::FC(const std::string& name,
        const LayerConstPtr& up,
        int output_length)
     : Layer(name, network, up)
-    , input_length_(up->getDim().h * up->getDim().w * up->getDim().c)
+    , input_length_(up->getDim().h * up->getDim().c * up->getDim().w)
     , output_length_(output_length) {
     c_ = output_length_;
     h_ = 1;
@@ -47,20 +47,17 @@ FC::~FC() {
 }
 
 size_t FC::prepareFwdPropagation() {
-    const size_t tensor_size = sizeof(float) * n_ * c_ * h_ * w_;
-    const size_t weight_size = sizeof(float) * input_length_ * output_length_;
-    const size_t bias_size   = sizeof(float) * output_length_;
     const size_t vector_size = sizeof(float) * n_;
-    const size_t total = tensor_size + weight_size + bias_size + vector_size;
 
-    checkCudaErrors(cudaMalloc(&d_y_, tensor_size));
-    checkCudaErrors(cudaMalloc(&d_weight_, weight_size));
-    checkCudaErrors(cudaMalloc(&d_bias_, bias_size));
+    checkCudaErrors(cudaMalloc(&d_y_, getTensorSizeInBytes()));
+    checkCudaErrors(cudaMalloc(&d_weight_, getWeightSizeInBytes()));
+    checkCudaErrors(cudaMalloc(&d_bias_, getBiasSizeInBytes()));
     checkCudaErrors(cudaMalloc(&d_one_vector_, vector_size));
 
     // create a one-vector on device
-    // TODO(Peter Han): No need do it multiple times for one Network instance,
-    // as it only varies for different batch size. So move it to Network class
+    // TODO(Peter Han): No need do it multiple times for one Network
+    // instance, as it only varies for different batch size. So move it to
+    // Network class
     // TODO(Peter Han): do it in GPU
     std::vector<float> h_one_vector(n_);
     for (auto&& i : h_one_vector) {
@@ -72,20 +69,17 @@ size_t FC::prepareFwdPropagation() {
                                     sizeof(float) * n_,
                                     cudaMemcpyHostToDevice));
 
-    return total;
+    return getTensorSizeInBytes() + getWeightSizeInBytes() +
+           getBiasSizeInBytes() + vector_size;
 }
 
 size_t FC::prepareBwdPropagation() {
-    const size_t tensor_size = sizeof(float) * n_ * c_ * h_ * w_;
-    const size_t weight_size = sizeof(float) * input_length_ * output_length_;
-    const size_t bias_size   = sizeof(float) * output_length_;
-    const size_t total       = tensor_size + weight_size + bias_size;
+    checkCudaErrors(cudaMalloc(&d_dy_, getTensorSizeInBytes()));
+    checkCudaErrors(cudaMalloc(&d_dweight_, getWeightSizeInBytes()));
+    checkCudaErrors(cudaMalloc(&d_dbias_, getBiasSizeInBytes()));
 
-    checkCudaErrors(cudaMalloc(&d_dy_, tensor_size));
-    checkCudaErrors(cudaMalloc(&d_dweight_, weight_size));
-    checkCudaErrors(cudaMalloc(&d_dbias_, bias_size));
-
-    return total;
+    return getTensorSizeInBytes() + getWeightSizeInBytes() +
+           getBiasSizeInBytes();
 }
 
 void FC::loadParameters(const shared_ptr<vector<float>>& h_params) {
@@ -98,9 +92,9 @@ void FC::loadParameters(const shared_ptr<vector<float>>& h_params) {
     // only one bias corresponding to one filter
     /*
     const size_t filter_num = kernel_.channel;
-    size_t one_filter_count = h_params->size() / filter_num - 1;  // 1 is bias
-    size_t filter_bytes     = one_filter_count * sizeof(float) * filter_num;
-    size_t bias_bytes       = 1 * sizeof(float) * filter_num;
+    size_t one_filter_count = h_params->size() / filter_num - 1;  // 1 is
+    bias size_t filter_bytes     = one_filter_count * sizeof(float) *
+    filter_num; size_t bias_bytes       = 1 * sizeof(float) * filter_num;
 
     // move filters and bias to device
     checkCudaErrors(cudaMemcpyAsync(
@@ -119,24 +113,22 @@ void FC::loadParameters(const shared_ptr<vector<float>>& h_params) {
     float w = sqrt(3.0f / (input_length_ * output_length_));
     std::uniform_real_distribution<> dist(-w, w);
     {
-        std::vector<float> weight(input_length_ * output_length_);
+        std::vector<float> weight(getWeightSize());
         for (auto&& ite : weight) {
             ite = static_cast<float>(dist(gen));
         }
         cudaMemcpyAsync(d_weight_,
                         &weight[0],
-                        sizeof(float) * weight.size(),
+                        getWeightSizeInBytes(),
                         cudaMemcpyHostToDevice);
     }
     {
-        std::vector<float> bias(output_length_);
+        std::vector<float> bias(getBiasSize());
         for (auto&& ite : bias) {
             ite = static_cast<float>(dist(gen));
         }
-        cudaMemcpyAsync(d_bias_,
-                        &bias[0],
-                        sizeof(float) * bias.size(),
-                        cudaMemcpyHostToDevice);
+        cudaMemcpyAsync(
+            d_bias_, &bias[0], getBiasSizeInBytes(), cudaMemcpyHostToDevice);
     }
 }
 
@@ -258,18 +250,16 @@ void FC::updateWeights() {
 
     cublasHandle_t cublas_handle = nn->getCublasHandle();
     const float learning_rate    = -nn->getSolverSetting().learning_rate;
-    const size_t weight_size     = input_length_ * output_length_;
-    const size_t bias_size       = output_length_;
 
     checkCudaErrors(cublasSaxpy(cublas_handle,
-                                static_cast<int>(weight_size),
+                                static_cast<int>(getWeightSize()),
                                 &learning_rate,
                                 d_dweight_,
                                 1,
                                 d_weight_,
                                 1));
     checkCudaErrors(cublasSaxpy(cublas_handle,
-                                static_cast<int>(bias_size),
+                                static_cast<int>(getBiasSize()),
                                 &learning_rate,
                                 d_dbias_,
                                 1,
@@ -277,16 +267,21 @@ void FC::updateWeights() {
                                 1));
 }
 
-cudnnTensorDescriptor_t FC::getDescriptor() const {
-    return y_desc_;
+size_t FC::getBiasSize() const {
+    assert(output_length_);
+    return output_length_;
 }
 
-float* FC::getTensor() const {
-    return d_y_;
+size_t FC::getBiasSizeInBytes() const {
+    return sizeof(float) * getBiasSize();
 }
 
-float* FC::getGradient() const {
-    return d_dy_;
+size_t FC::getWeightSize() const {
+    return input_length_ * output_length_;
+}
+
+size_t FC::getWeightSizeInBytes() const {
+    return sizeof(float) * getWeightSize();
 }
 }  // namespace layers
 }  // namespace nn

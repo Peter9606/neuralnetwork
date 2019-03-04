@@ -29,7 +29,8 @@ Conv::Conv(const std::string& name,
     , kernel_(kernel)
     , pad_(pad)
     , stride_(stride)
-    , dilation_(dilation) {
+    , dilation_(dilation)
+    , input_channel_(up->getDim().c) {
     checkCUDNN(cudnnCreateFilterDescriptor(&filter_desc_));
     checkCUDNN(cudnnCreateConvolutionDescriptor(&conv_desc_));
     checkCUDNN(cudnnCreateTensorDescriptor(&bias_desc_));
@@ -39,7 +40,7 @@ Conv::Conv(const std::string& name,
                                           CUDNN_DATA_FLOAT,
                                           CUDNN_TENSOR_NCHW,
                                           kernel_.channel,
-                                          up->getDim().c,
+                                          input_channel_,
                                           kernel_.height,
                                           kernel_.width));
     checkCUDNN(cudnnSetConvolution2dDescriptor(conv_desc_,
@@ -173,33 +174,29 @@ Conv::~Conv() {
 void Conv::loadParameters(const shared_ptr<vector<float>>& h_params) {
     LayerConstPtr up = up_.lock();
     assert(("Upstream is expired", up));
-    const int input_channel = up->getDim().c;
+    const int input_channel = up->getChannel();
     std::random_device rd;
     std::mt19937 gen(rd());
     float w = sqrt(3.0f / (input_channel * kernel_.width * kernel_.height));
     std::uniform_real_distribution<> dist(-w, w);
 
     {
-        const size_t filter_length =
-            input_channel * kernel_.width * kernel_.height * kernel_.channel;
-        std::vector<float> filter(filter_length);
+        std::vector<float> filter(getFilterSize());
         for (auto&& ite : filter) {
             ite = static_cast<float>(dist(gen));
         }
         cudaMemcpyAsync(d_filter_,
                         &filter[0],
-                        sizeof(float) * filter.size(),
+                        getFilterSizeInBytes(),
                         cudaMemcpyHostToDevice);
     }
     {
-        std::vector<float> bias(kernel_.channel);
+        std::vector<float> bias(getBiasSize());
         for (auto&& ite : bias) {
             ite = static_cast<float>(dist(gen));
         }
-        cudaMemcpyAsync(d_bias_,
-                        &bias[0],
-                        sizeof(float) * bias.size(),
-                        cudaMemcpyHostToDevice);
+        cudaMemcpyAsync(
+            d_bias_, &bias[0], getBiasSizeInBytes(), cudaMemcpyHostToDevice);
     }
 }
 
@@ -211,35 +208,21 @@ shared_ptr<vector<float>> Conv::saveParameters() {
 }
 
 size_t Conv::prepareFwdPropagation() {
-    LayerConstPtr up = up_.lock();
-    assert(("Upstream is expired", up));
+    checkCudaErrors(cudaMalloc(&d_y_, getTensorSizeInBytes()));
+    checkCudaErrors(cudaMalloc(&d_bias_, getBiasSizeInBytes()));
+    checkCudaErrors(cudaMalloc(&d_filter_, getFilterSizeInBytes()));
 
-    const size_t tensor_size = sizeof(float) * n_ * c_ * h_ * w_;
-    const size_t bias_size   = sizeof(float) * c_;
-    const size_t filter_size = sizeof(float) * kernel_.height * kernel_.width *
-                               up->getDim().c * kernel_.channel;
-
-    checkCudaErrors(cudaMalloc(&d_y_, tensor_size));
-    checkCudaErrors(cudaMalloc(&d_bias_, bias_size));
-    checkCudaErrors(cudaMalloc(&d_filter_, filter_size));
-
-    return tensor_size + bias_size + filter_size;
+    return getTensorSizeInBytes() + getBiasSizeInBytes() +
+           getFilterSizeInBytes();
 }
 
 size_t Conv::prepareBwdPropagation() {
-    LayerConstPtr up = up_.lock();
-    assert(("Upstream is expired", up));
+    checkCudaErrors(cudaMalloc(&d_dy_, getTensorSizeInBytes()));
+    checkCudaErrors(cudaMalloc(&d_dbias_, getBiasSizeInBytes()));
+    checkCudaErrors(cudaMalloc(&d_dfilter_, getFilterSizeInBytes()));
 
-    const size_t tensor_size = sizeof(float) * n_ * c_ * h_ * w_;
-    const size_t bias_size   = sizeof(float) * c_;
-    const size_t filter_size = sizeof(float) * kernel_.height * kernel_.width *
-                               up->getDim().c * kernel_.channel;
-
-    checkCudaErrors(cudaMalloc(&d_dy_, tensor_size));
-    checkCudaErrors(cudaMalloc(&d_dbias_, bias_size));
-    checkCudaErrors(cudaMalloc(&d_dfilter_, filter_size));
-
-    return tensor_size + bias_size + filter_size;
+    return getTensorSizeInBytes() + getBiasSizeInBytes() +
+           getFilterSizeInBytes();
 }
 
 void Conv::fwdPropagation() {
@@ -327,47 +310,44 @@ void Conv::bwdPropagation() {
 void Conv::updateWeights() {
     NetworkConstPtr nn = network_.lock();
     assert(("Network is expired", nn));
-    LayerConstPtr up = up_.lock();
-    assert(("Upstream is expired", up));
 
     const SolverSetting setting = nn->getSolverSetting();
     const float learning_rate   = -setting.learning_rate;
-    const size_t bias_size      = c_;
-    const int input_channel     = up->getDim().c;
-    const size_t filter_size =
-        kernel_.height * kernel_.width * input_channel * kernel_.channel;
 
     cublasHandle_t cublas_handle = nn->getCublasHandle();
 
     checkCudaErrors(cublasSaxpy(cublas_handle,
-                                static_cast<int>(filter_size),
+                                static_cast<int>(getFilterSize()),
                                 &learning_rate,
                                 d_dfilter_,
                                 1,
                                 d_filter_,
                                 1));
     checkCudaErrors(cublasSaxpy(cublas_handle,
-                                static_cast<int>(bias_size),
+                                static_cast<int>(getBiasSize()),
                                 &learning_rate,
                                 d_dbias_,
                                 1,
                                 d_bias_,
                                 1));
-
-    checkCudaErrors(cudaDeviceSynchronize());
 }
 
-cudnnTensorDescriptor_t Conv::getDescriptor() const {
-    return y_desc_;
+size_t Conv::getBiasSize() const {
+    assert(c_ != 0);
+    return c_;
 }
 
-float* Conv::getTensor() const {
-    return d_y_;
+size_t Conv::getBiasSizeInBytes() const {
+    return sizeof(float) * getBiasSize();
 }
 
-float* Conv::getGradient() const {
-    return d_dy_;
+size_t Conv::getFilterSize() const {
+    assert(input_channel_ != 0);
+    return kernel_.height * kernel_.width * kernel_.channel * input_channel_;
 }
 
+size_t Conv::getFilterSizeInBytes() const {
+    return sizeof(float) * getFilterSize();
+}
 }  // namespace layers
 }  // namespace nn

@@ -67,33 +67,8 @@ class Softmax : public Layer {
      */
     void bwdPropagation() final;
 
-    /**
-     * get output tensor descriptor
-     *
-     * @return output tensor descriptor
-     */
-    cudnnTensorDescriptor_t getDescriptor() const;
-
-    /**
-     * get output tensor
-     *
-     * @return pointer to output tensor on device
-     */
-    float* getTensor() const;
-
-    /**
-     * get gradient w.r.t current layer's output
-     *
-     * @return gradient
-     */
-    float* getGradient() const;
-
  private:
     const bool in_place_;
-
-    cudnnTensorDescriptor_t y_desc_ = nullptr;
-    float* d_y_                     = nullptr;
-    float* d_dy_                    = nullptr;
 };
 
 }  // namespace layers

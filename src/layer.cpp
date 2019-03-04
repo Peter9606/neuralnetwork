@@ -59,12 +59,40 @@ void Layer::updateWeights() {
 }
 
 Dim Layer::getDim() const {
+    assert(c_ != 0);
+    assert(h_ != 0);
+    assert(w_ != 0);
     Dim d = {c_, h_, w_};
     return d;
 }
 
+int Layer::getChannel() const {
+    assert(c_ != 0);
+    return c_;
+}
+
+size_t Layer::getTensorSize() const {
+    assert(n_ != 0);
+    assert(c_ != 0);
+    assert(h_ != 0);
+    assert(w_ != 0);
+    return c_ * h_ * w_ * n_;
+}
+
+size_t Layer::getTensorSizeInBytes() const {
+    return sizeof(float) * getTensorSize();
+}
+
+cudnnTensorDescriptor_t Layer::getDescriptor() const {
+    return y_desc_;
+}
+
+float* Layer::getTensor() const {
+    return d_y_;
+}
+
 float* Layer::getGradient() const {
-    return nullptr;
+    return d_dy_;
 }
 
 }  // namespace nn
