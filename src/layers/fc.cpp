@@ -249,7 +249,7 @@ void FC::updateWeights() {
     assert(("Up stream is expired", up));
 
     cublasHandle_t cublas_handle = nn->getCublasHandle();
-    const float learning_rate    = -nn->getSolverSetting().learning_rate;
+    const float learning_rate    = -nn->getLearningRate();
 
     checkCudaErrors(cublasSaxpy(cublas_handle,
                                 static_cast<int>(getWeightSize()),

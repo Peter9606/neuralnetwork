@@ -77,7 +77,7 @@ const std::string readableSize(size_t s) {
 namespace nn {
 NetworkImpl::NetworkImpl(int batch_size)
     : batch_size_(batch_size)
-    , solver_setting_({0.001, SGD}) {
+    , solver_setting_({SGD}) {
     dim_       = {1, 28, 28};
     loss_type_ = CROSS_ENTROPY;
 
@@ -165,8 +165,8 @@ void NetworkImpl::updateMemoryNeeded(size_t inc) const {
     memory_needed_ += inc;
 }
 
-SolverSetting NetworkImpl::getSolverSetting() const {
-    return solver_setting_;
+float NetworkImpl::getLearningRate() const {
+    return learning_rate_;
 }
 
 LossType NetworkImpl::getLossType() const {

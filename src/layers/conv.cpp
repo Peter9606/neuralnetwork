@@ -311,8 +311,7 @@ void Conv::updateWeights() {
     NetworkConstPtr nn = network_.lock();
     assert(("Network is expired", nn));
 
-    const SolverSetting setting = nn->getSolverSetting();
-    const float learning_rate   = -setting.learning_rate;
+    const float learning_rate = -nn->getLearningRate();
 
     cublasHandle_t cublas_handle = nn->getCublasHandle();
 

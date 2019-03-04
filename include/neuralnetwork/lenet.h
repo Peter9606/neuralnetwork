@@ -58,5 +58,7 @@ class LeNet : public NetworkImpl {
      * @param[in]       d_label     label data in device
      */
     virtual void computeLoss(const float* d_label) const;
+
+    void updateLearningRate(int iter) const;
 };
 }  // namespace nn

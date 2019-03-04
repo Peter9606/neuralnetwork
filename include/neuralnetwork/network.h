@@ -53,7 +53,6 @@ enum SolverType {
 /** @struct SolverSetting
  */
 struct SolverSetting {
-    float learning_rate;
     SolverType type;
     /*
         union {
@@ -89,11 +88,11 @@ class Network {
     virtual void updateMemoryNeeded(size_t inc) const = 0;
 
     /**
-     * get solver setting
+     * get learning rate
      *
-     * @return get solver setting
+     * @return get learning rate
      */
-    virtual SolverSetting getSolverSetting() const = 0;
+    virtual float getLearningRate() const = 0;
 
     /**
      * get loss calculation method
