@@ -54,9 +54,8 @@ size_t Softmax::prepareFwdPropagation() {
         d_y_ = up->getTensor();
         return 0;
     } else {
-        size_t output_size = n_ * c_ * h_ * w_ * sizeof(float);
-        checkCudaErrors(cudaMalloc(&d_y_, output_size));
-        return output_size;
+        checkCudaErrors(cudaMalloc(&d_y_, getTensorSizeInBytes()));
+        return getTensorSizeInBytes();
     }
 }
 
@@ -67,9 +66,8 @@ size_t Softmax::prepareBwdPropagation() {
         d_dy_ = up->getGradient();
         return 0;
     } else {
-        size_t output_size = n_ * c_ * h_ * w_ * sizeof(float);
-        checkCudaErrors(cudaMalloc(&d_dy_, output_size));
-        return output_size;
+        checkCudaErrors(cudaMalloc(&d_dy_, getTensorSizeInBytes()));
+        return getTensorSizeInBytes();
     }
 }
 
@@ -125,18 +123,5 @@ void Softmax::bwdPropagation() {
                                     x_desc,
                                     d_dx));
 }
-
-cudnnTensorDescriptor_t Softmax::getDescriptor() const {
-    return y_desc_;
-}
-
-float* Softmax::getTensor() const {
-    return d_y_;
-}
-
-float* Softmax::getGradient() const {
-    return d_dy_;
-}
-
 }  // namespace layers
 }  // namespace nn

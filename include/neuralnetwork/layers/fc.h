@@ -93,39 +93,43 @@ class FC : public Layer {
     void updateWeights() final;
 
     /**
-     * get output tensor descriptor
+     * get bias size
      *
-     * @return output tensor descriptor
+     * @return bias size
      */
-    cudnnTensorDescriptor_t getDescriptor() const;
+    size_t getBiasSize() const;
 
     /**
-     * get output tensor
+     * get bias size in bytes
      *
-     * @return pointer to output tensor on device
+     * @return bias size in bytes
      */
-    float* getTensor() const;
+    size_t getBiasSizeInBytes() const;
 
     /**
-     * get gradient w.r.t current layer's output
+     * get weight size
      *
-     * @return graident
+     * @return weight size
      */
-    float* getGradient() const;
+    size_t getWeightSize() const;
+
+    /**
+     * get weight size in bytes
+     *
+     * @return weight size in bytes
+     */
+    size_t getWeightSizeInBytes() const;
 
  private:
-    const int input_length_;
-    const int output_length_;
+    const size_t input_length_;
+    const size_t output_length_;
 
-    cudnnTensorDescriptor_t y_desc_    = nullptr;
     cudnnTensorDescriptor_t bias_desc_ = nullptr;
 
     float* d_weight_     = nullptr;
     float* d_bias_       = nullptr;
-    float* d_y_          = nullptr;
     float* d_dweight_    = nullptr;
     float* d_dbias_      = nullptr;
-    float* d_dy_         = nullptr;
     float* d_one_vector_ = nullptr;
 };
 

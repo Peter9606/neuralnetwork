@@ -95,27 +95,6 @@ class Pool : public Layer {
      */
     void bwdPropagation() final;
 
-    /**
-     * get output tensor descriptor
-     *
-     * @return output tensor descriptor
-     */
-    cudnnTensorDescriptor_t getDescriptor() const;
-
-    /**
-     * get output tensor
-     *
-     * @return pointer to output tensor on device
-     */
-    float* getTensor() const;
-
-    /**
-     * get gradient w.r.t. output
-     *
-     * @return gradient
-     */
-    float* getGradient() const;
-
  private:
     const Window window_;
     const Pad pad_;
@@ -123,10 +102,6 @@ class Pool : public Layer {
     const Type type_;
 
     cudnnPoolingDescriptor_t pool_desc_ = nullptr;
-    cudnnTensorDescriptor_t y_desc_     = nullptr;
-
-    float* d_y_  = nullptr;
-    float* d_dy_ = nullptr;
 };
 
 }  // namespace layers

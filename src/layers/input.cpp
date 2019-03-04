@@ -36,26 +36,13 @@ Input::~Input() {
 }
 
 size_t Input::prepareFwdPropagation() {
-    const size_t size       = sizeof(float) * n_ * c_ * h_ * w_;
-    NetworkConstPtr network = network_.lock();
-    assert(("Network is expired", network));
+    checkCudaErrors(cudaMalloc(&d_y_, getTensorSizeInBytes()));
 
-    checkCudaErrors(cudaMalloc(&d_y_, size));
-
-    return size;
+    return getTensorSizeInBytes();
 }
 
 void Input::fwdPropagation() {
     // do nothing here.
 }
-
-cudnnTensorDescriptor_t Input::getDescriptor() const {
-    return y_desc_;
-}
-
-float* Input::getTensor() const {
-    return d_y_;
-}
-
 }  // namespace layers
 }  // namespace nn

@@ -78,7 +78,6 @@ NetworkImpl::NetworkImpl(int batch_size,
 }
 
 NetworkImpl::~NetworkImpl() {
-    checkCudaErrors(cudaSetDevice(0));
     checkCudaErrors(cublasDestroy(cublas_handle_));
     checkCUDNN(cudnnDestroy(cudnn_handle_));
     checkCudaErrors(cudaFree(d_workspace_));
@@ -128,7 +127,6 @@ void NetworkImpl::train(const shared_ptr<vector<float>> &h_data,
         fwdPropagation(d_data);
         bwdPropagation(d_label);
         updateWeights();
-        checkCudaErrors(cudaDeviceSynchronize());
 
         if (iter % 200 == 0) {
             std::vector<float> output(10 * batch_size_);

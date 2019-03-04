@@ -148,33 +148,40 @@ class Conv : public Layer {
     void updateWeights() final;
 
     /**
-     * get output tensor descriptor
+     * get bias size
      *
-     * @return output tensor descriptor
+     * @return bias size
      */
-    cudnnTensorDescriptor_t getDescriptor() const;
+    size_t getBiasSize() const;
 
     /**
-     * get output tensor
+     * get bias size in bytes
      *
-     * @return pointer to output tensor on device
+     * @return bias size in bytes
      */
-    float* getTensor() const;
+    size_t getBiasSizeInBytes() const;
 
     /**
-     * get gradient w.r.t current layer's output
+     * get filter size
      *
-     * @return gradient
+     * @return filter size
      */
-    float* getGradient() const;
+    size_t getFilterSize() const;
+
+    /**
+     * get filter size in bytes
+     *
+     * @return filter size in bytes
+     */
+    size_t getFilterSizeInBytes() const;
 
  private:
     const Kernel kernel_;
     const Pad pad_;
     const Stride stride_;
     const Dilation dilation_;
+    const int input_channel_;
 
-    cudnnTensorDescriptor_t y_desc_         = nullptr;
     cudnnTensorDescriptor_t bias_desc_      = nullptr;
     cudnnFilterDescriptor_t filter_desc_    = nullptr;
     cudnnConvolutionDescriptor_t conv_desc_ = nullptr;
@@ -187,8 +194,6 @@ class Conv : public Layer {
     float* d_dfilter_ = nullptr;
     float* d_bias_    = nullptr;
     float* d_dbias_   = nullptr;
-    float* d_y_       = nullptr;
-    float* d_dy_      = nullptr;
 };
 
 }  // namespace layers

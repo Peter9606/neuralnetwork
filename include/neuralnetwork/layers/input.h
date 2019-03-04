@@ -53,25 +53,6 @@ class Input : public Layer {
      * run forward propagation
      */
     void fwdPropagation() final;
-
-    /**
-     * get output tensor descriptor
-     *
-     * @return output tensor descriptor
-     */
-    cudnnTensorDescriptor_t getDescriptor() const;
-
-    /**
-     * get output tensor
-     *
-     * @return pointer to output tensor on device
-     */
-    float* getTensor() const;
-
- private:
-    cudnnTensorDescriptor_t y_desc_ = nullptr;
-
-    float* d_y_ = nullptr;
 };
 
 }  // namespace layers

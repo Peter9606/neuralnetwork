@@ -77,9 +77,8 @@ size_t Activation::prepareFwdPropagation() {
         d_y_ = up->getTensor();
         return 0;
     } else {
-        size_t total = n_ * c_ * h_ * w_ * sizeof(float);
-        checkCudaErrors(cudaMalloc(&d_y_, total));
-        return total;
+        checkCudaErrors(cudaMalloc(&d_y_, getTensorSizeInBytes()));
+        return getTensorSizeInBytes();
     }
 }
 
@@ -90,9 +89,8 @@ size_t Activation::prepareBwdPropagation() {
         d_dy_ = up->getGradient();
         return 0;
     } else {
-        size_t total = n_ * c_ * h_ * w_ * sizeof(float);
-        checkCudaErrors(cudaMalloc(&d_dy_, total));
-        return total;
+        checkCudaErrors(cudaMalloc(&d_dy_, getTensorSizeInBytes()));
+        return getTensorSizeInBytes();
     }
 }
 
@@ -148,18 +146,5 @@ void Activation::bwdPropagation() {
                                        x_desc,
                                        d_dx));
 }
-
-cudnnTensorDescriptor_t Activation::getDescriptor() const {
-    return y_desc_;
-}
-
-float* Activation::getTensor() const {
-    return d_y_;
-}
-
-float* Activation::getGradient() const {
-    return d_dy_;
-}
-
 }  // namespace layers
 }  // namespace nn
