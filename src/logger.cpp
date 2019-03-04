@@ -53,12 +53,14 @@ Logger::Logger() try {
     sinks.push_back(file_sink);
 
     logger_ = make_shared<logger>("", sinks.begin(), sinks.end());
+    spdlog::flush_every(std::chrono::seconds(5));
 } catch (const spdlog::spdlog_ex ex) {
     std::cout << "Log initialization failed: " << ex.what() << std::endl;
     throw ex;
 }
 
 Logger::~Logger() {
+    logger_->flush();
     spdlog::drop_all();
 }
 }  // namespace nn
