@@ -59,83 +59,86 @@ LeNet::LeNet(int batch_size)
 LeNet::~LeNet() {
 }
 
-void LeNet::train(const shared_ptr<vector<float>> &h_data,
+float LeNet::test(const shared_ptr<vector<float>> &h_data,
                   const shared_ptr<vector<float>> &h_label) const {
+    const size_t size     = h_label->size();
+    const size_t kTotal   = size / batch_size_;
+    const size_t data_len = batch_size_ * dim_.c * dim_.h * dim_.w;
+    int num_errors        = 0;
+    for (int iter = 0; iter < kTotal - 1; ++iter) {
+        // Prepare current batch on device
+        float *d_data = layers_[0]->getTensor();
+        checkCudaErrors(cudaMemcpyAsync(d_data,
+                                        &h_data->data()[iter * data_len],
+                                        sizeof(float) * data_len,
+                                        cudaMemcpyHostToDevice));
+        checkCudaErrors(cudaDeviceSynchronize());
+
+        fwdPropagation(d_data);
+
+        std::vector<float> output(10 * batch_size_);
+        auto last       = *(layers_.rbegin());
+        float *d_output = last->getTensor();
+
+        checkCudaErrors(cudaMemcpyAsync(&output[0],
+                                        d_output,
+                                        sizeof(float) * output.size(),
+                                        cudaMemcpyDeviceToHost));
+        checkCudaErrors(cudaDeviceSynchronize());
+
+        for (int i = 0; i < batch_size_; i++) {
+            // Determine classification according to maximal response
+            int base   = i * 10;
+            int chosen = 0;
+
+            for (int id = 0; id < 10; ++id) {
+                if (output[base + chosen] < output[base + id]) {
+                    chosen = id;
+                }
+            }
+            if (chosen != h_label->at(iter * 64 + i)) {
+                ++num_errors;
+            }
+        }
+    }
+    return static_cast<float>(num_errors) / (batch_size_ * (kTotal - 1));
+}
+
+void LeNet::train(const shared_ptr<vector<float>> &h_data_train,
+                  const shared_ptr<vector<float>> &h_label_train,
+                  const shared_ptr<vector<float>> &h_data_test,
+                  const shared_ptr<vector<float>> &h_label_test) const {
     prepareTraining();
     checkCudaErrors(cudaDeviceSynchronize());
     auto t1 = high_resolution_clock::now();
 
-    const size_t train_size = h_label->size();
+    const size_t train_size = h_label_train->size();
 
-    const int total_iter = 200000;
+    const int total_iter = 50000;
     for (int iter = 0; iter < total_iter; ++iter) {
         int imageid = iter % (train_size / batch_size_);
 
         // Prepare current batch on device
         float *d_data         = layers_[0]->getTensor();
         const size_t data_len = batch_size_ * dim_.c * dim_.h * dim_.w;
-        checkCudaErrors(cudaMemcpyAsync(d_data,
-                                        &h_data->data()[imageid * data_len],
-                                        sizeof(float) * data_len,
-                                        cudaMemcpyHostToDevice));
+        checkCudaErrors(
+            cudaMemcpyAsync(d_data,
+                            &h_data_train->data()[imageid * data_len],
+                            sizeof(float) * data_len,
+                            cudaMemcpyHostToDevice));
 
         float *d_label;
         checkCudaErrors(cudaMalloc(&d_label, sizeof(float) * batch_size_));
-        checkCudaErrors(cudaMemcpyAsync(d_label,
-                                        &h_label->data()[imageid * batch_size_],
-                                        sizeof(float) * batch_size_,
-                                        cudaMemcpyHostToDevice));
+        checkCudaErrors(
+            cudaMemcpyAsync(d_label,
+                            &h_label_train->data()[imageid * batch_size_],
+                            sizeof(float) * batch_size_,
+                            cudaMemcpyHostToDevice));
 
-        checkCudaErrors(cudaDeviceSynchronize());
         fwdPropagation(d_data);
         bwdPropagation(d_label);
-        updateLearningRate(iter);
         updateWeights();
-
-        if (iter % 200 == 0) {
-            std::vector<float> output(10 * batch_size_);
-            std::vector<float> gradient(10 * batch_size_);
-            std::vector<float> fcoutput(10 * batch_size_);
-            auto last         = *(layers_.rbegin());
-            float *d_gradient = last->getGradient();
-            float *d_output   = last->getTensor();
-            float *d_fcoutput = layers_[1]->getTensor();
-
-            checkCudaErrors(cudaMemcpyAsync(&output[0],
-                                            d_output,
-                                            sizeof(float) * output.size(),
-                                            cudaMemcpyDeviceToHost));
-            checkCudaErrors(cudaMemcpyAsync(&gradient[0],
-                                            d_gradient,
-                                            sizeof(float) * gradient.size(),
-                                            cudaMemcpyDeviceToHost));
-            checkCudaErrors(cudaMemcpyAsync(&fcoutput[0],
-                                            d_fcoutput,
-                                            sizeof(float) * fcoutput.size(),
-                                            cudaMemcpyDeviceToHost));
-
-            std::vector<float> grand_truth(batch_size_);
-            checkCudaErrors(cudaMemcpyAsync(&grand_truth[0],
-                                            d_label,
-                                            sizeof(float) * grand_truth.size(),
-                                            cudaMemcpyDeviceToHost));
-            int num_errors = 0;
-            for (int i = 0; i < batch_size_; i++) {
-                // Determine classification according to maximal response
-                int base   = i * 10;
-                int chosen = 0;
-
-                for (int id = 0; id < 10; ++id) {
-                    if (output[base + chosen] < output[base + id]) {
-                        chosen = id;
-                    }
-                }
-                if (chosen != h_label->at(imageid * batch_size_ + i))
-                    ++num_errors;
-            }
-            float err = static_cast<float>(num_errors) / batch_size_;
-            log_->info("Iter: {}, Error rates: {}", iter, err * 100.0f);
-        }
+        updateLearningRate(iter);
     }
     checkCudaErrors(cudaDeviceSynchronize());
     auto t2 = high_resolution_clock::now();
@@ -143,6 +146,9 @@ void LeNet::train(const shared_ptr<vector<float>> &h_data,
     log_->info("Iteration time: {}",
                duration_cast<microseconds>(t2 - t1).count() / 1000.0f /
                    total_iter);
+
+    auto err = test(h_data_test, h_label_test);
+    log_->info("Error rates@test: {}", err * 100.0f);
 }
 
 void LeNet::computeLoss(const float *d_label) const {
@@ -212,13 +218,14 @@ void LeNet::updateLearningRate(int iter) const {
 }  // namespace nn
 
 int main() try {
-    int iterations                      = 100;
     size_t width                        = 1;
     size_t height                       = 1;
     size_t channels                     = 1;
-    int batch_size                      = 128;
+    int batch_size                      = 64;
     const char *const train_images_path = "train-images-idx3-ubyte";
     const char *const train_labels_path = "train-labels-idx1-ubyte";
+    const char *const test_images_path  = "t10k-images-idx3-ubyte";
+    const char *const test_labels_path  = "t10k-labels-idx1-ubyte";
 
     shared_ptr<spdlog::logger> log = spdlog::default_logger();
     log->info("Reading input data");
@@ -230,13 +237,17 @@ int main() try {
                                          nullptr,
                                          &width,
                                          &height);
+    size_t test_size  = ReadUByteDataset(
+        test_images_path, test_labels_path, nullptr, nullptr, &width, &height);
 
-    if (train_size == 0) {
+    if (train_size == 0 || test_size == 0) {
         return 1;
     }
 
     vector<uint8_t> train_images(train_size * width * height * channels);
     vector<uint8_t> train_labels(train_size);
+    vector<uint8_t> test_images(test_size * width * height * channels);
+    vector<uint8_t> test_labels(test_size);
 
     // Read data from datasets
     if (ReadUByteDataset(train_images_path,
@@ -247,15 +258,29 @@ int main() try {
                          &height) != train_size) {
         return 2;
     }
+    if (ReadUByteDataset(test_images_path,
+                         test_labels_path,
+                         &test_images[0],
+                         &test_labels[0],
+                         &width,
+                         &height) != test_size) {
+        return 2;
+    }
 
-    log->info("Done. Training dataset size: {}", train_size);
-    log->info("Batch size {}, iterations {}", batch_size, iterations);
+    log->info("Done. Training dataset size: {}, test dataset size:{}",
+              train_size,
+              test_size);
+    log->info("Batch size {}", batch_size);
 
     // Normalize training set to be in [0,1]
     shared_ptr<vector<float>> train_images_float =
         make_shared<vector<float>>(train_images.size());
     shared_ptr<vector<float>> train_labels_float =
         make_shared<vector<float>>(train_size);
+    shared_ptr<vector<float>> test_images_float =
+        make_shared<vector<float>>(test_images.size());
+    shared_ptr<vector<float>> test_labels_float =
+        make_shared<vector<float>>(test_size);
 
     for (size_t i = 0; i < train_size * channels * width * height; ++i)
         (*train_images_float)[i] = static_cast<float>(train_images[i] / 255.0f);
@@ -263,9 +288,18 @@ int main() try {
     for (size_t i = 0; i < train_size; ++i)
         (*train_labels_float)[i] = static_cast<float>(train_labels[i]);
 
+    for (size_t i = 0; i < test_size * channels * width * height; ++i)
+        (*test_images_float)[i] = static_cast<float>(test_images[i] / 255.0f);
+
+    for (size_t i = 0; i < test_size; ++i)
+        (*test_labels_float)[i] = static_cast<float>(test_labels[i]);
+
     shared_ptr<nn::LeNet> lenet = make_shared<nn::LeNet>(batch_size);
     lenet->buildNetwork();
-    lenet->train(train_images_float, train_labels_float);
+    lenet->train(train_images_float,
+                 train_labels_float,
+                 test_images_float,
+                 test_labels_float);
     return 0;
 } catch (const std::runtime_error &err) {
     std::cout << "runtime error happened" << std::endl;
