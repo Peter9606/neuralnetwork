@@ -39,12 +39,25 @@ class LeNet : public NetworkImpl {
     /**
      * train nn
      *
-     * @param[in] h_data 	data vector located in host
-     * @param[in] h_label 	label vector located in host
+     * @param[in] h_data_train 	    train data vector located in host
+     * @param[in] h_label_train 	train label vector located in host
+     * @param[in] h_data_test 	    test data vector located in host
+     * @param[in] h_label_test 	    test label vector located in host
      */
-    void train(const shared_ptr<vector<float>>& h_data,
-               const shared_ptr<vector<float>>& h_label) const;
+    void train(const shared_ptr<vector<float>>& h_data_train,
+               const shared_ptr<vector<float>>& h_label_train,
+               const shared_ptr<vector<float>>& h_data_test,
+               const shared_ptr<vector<float>>& h_label_test) const;
+    /*
+     * test nn
+     *
+     * @param[in] h_data            test data vector located in host
+     * @param[in] h_label           test label vector located in host
+     * @return                      accuracy
+     */
 
+    float test(const shared_ptr<vector<float>>& h_data,
+               const shared_ptr<vector<float>>& h_label) const;
     /**
      * @brief construct network topology
      */
