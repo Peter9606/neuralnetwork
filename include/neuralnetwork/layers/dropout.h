@@ -11,7 +11,8 @@
  * OTHER DEALINGS IN THE SOFTWARE.
  */
 #pragma once
-#include <cudnn.h>
+
+#include <string>
 
 #include "neuralnetwork/layer.h"
 
@@ -22,6 +23,55 @@ namespace layers {
  */
 class Dropout : public Layer {
  public:
+    /**
+     * Dropout constructor
+     *
+     * @param[in] name              layer name
+     * @param[in] network           Network interface handle
+     * @param[in] up                upstream layer
+     * @param[in] dropout_rate      dropout rate
+     */
+    Dropout(const std::string& name,
+            const NetworkConstPtr& network,
+            const LayerConstPtr& up,
+            float dropout_rate);
+
+    /**
+     * Desctructor
+     */
+    virtual ~Dropout();
+
+    /**
+     * prepare forward propagation
+     *
+     * @return allocated memory size on GPU in bytes.
+     */
+    size_t prepareFwdPropagation() final;
+
+    /**
+     * prepare backward propagation
+     *
+     * @return allocated memory size on GPU in bytes.
+     */
+    size_t prepareBwdPropagation() final;
+
+    /**
+     * run forward propagation
+     */
+    void fwdPropagation() final;
+
+    /**
+     * run backward propgation
+     */
+    void bwdPropagation() final;
+
+ private:
+    const float dropout_rate_;
+
+    float* d_reserve_space_                = nullptr;
+    float* d_states_                       = nullptr;
+    cudnnDropoutDescriptor_t dropout_desc_ = nullptr;
+    size_t reserve_space_size_in_bytes_;
 };
 
 }  // namespace layers
