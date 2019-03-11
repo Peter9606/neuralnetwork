@@ -203,14 +203,18 @@ void LeNet::buildNetwork() {
     auto fc2 = make_shared<FC>("FC2", shared_from_this(), relu1, 10);
     layers_.push_back(fc2);
 
-    auto softmax = make_shared<Softmax>("Softmax", shared_from_this(), fc2);
+    auto dropout =
+        make_shared<Dropout>("Dropout", shared_from_this(), fc2, 0.8);
+    layers_.push_back(dropout);
+
+    auto softmax = make_shared<Softmax>("Softmax", shared_from_this(), dropout);
     layers_.push_back(softmax);
 }
 
 void LeNet::updateLearningRate(int iter) const {
-    const static float kBASE  = 0.01f;
-    const static float kGAMMA = 0.0001f;
-    const static float kPOWER = 0.75f;
+    static const float kBASE  = 0.01f;
+    static const float kGAMMA = 0.0001f;
+    static const float kPOWER = 0.75f;
 
     learning_rate_ =
         static_cast<float>(kBASE * pow((1.0 + kGAMMA * iter), (-kPOWER)));

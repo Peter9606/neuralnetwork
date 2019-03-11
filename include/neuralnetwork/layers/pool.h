@@ -11,8 +11,6 @@
  * OTHER DEALINGS IN THE SOFTWARE.
  */
 #pragma once
-#include <cudnn.h>
-
 #include <string>
 
 #include "neuralnetwork/layer.h"
