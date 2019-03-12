@@ -154,6 +154,13 @@ class Network {
      * @return pointer to workspace in device
      */
     virtual float* getWorkspace() const = 0;
+
+    /**
+     * @brief if network is inference only
+     *
+     * @return true if inference only, otherwise false
+     */
+    virtual bool isInferenceOnly() const = 0;
 };
 
 using NetworkPtr          = shared_ptr<Network>;
