@@ -65,6 +65,8 @@ float LeNet::test(const shared_ptr<vector<float>> &h_data,
     const size_t kTotal   = size / batch_size_;
     const size_t data_len = batch_size_ * dim_.c * dim_.h * dim_.w;
     int num_errors        = 0;
+    this->inference_only_ = true;
+
     for (int iter = 0; iter < kTotal - 1; ++iter) {
         // Prepare current batch on device
         float *d_data = layers_[0]->getTensor();
@@ -114,7 +116,7 @@ void LeNet::train(const shared_ptr<vector<float>> &h_data_train,
 
     const size_t train_size = h_label_train->size();
 
-    const int total_iter = 50000;
+    const int total_iter = 10000;
     for (int iter = 0; iter < total_iter; ++iter) {
         int imageid = iter % (train_size / batch_size_);
 
@@ -197,17 +199,18 @@ void LeNet::buildNetwork() {
     auto fc1 = make_shared<FC>("FC1", shared_from_this(), pool2, 500);
     layers_.push_back(fc1);
 
-    auto relu1 = make_shared<Activation>("FC1Relu", shared_from_this(), fc1);
+    auto dropout =
+        make_shared<Dropout>("Dropout", shared_from_this(), fc1, 0.5);
+    layers_.push_back(dropout);
+
+    auto relu1 =
+        make_shared<Activation>("FC1Relu", shared_from_this(), dropout);
     layers_.push_back(relu1);
 
     auto fc2 = make_shared<FC>("FC2", shared_from_this(), relu1, 10);
     layers_.push_back(fc2);
 
-    auto dropout =
-        make_shared<Dropout>("Dropout", shared_from_this(), fc2, 0.8);
-    layers_.push_back(dropout);
-
-    auto softmax = make_shared<Softmax>("Softmax", shared_from_this(), dropout);
+    auto softmax = make_shared<Softmax>("Softmax", shared_from_this(), fc2);
     layers_.push_back(softmax);
 }
 

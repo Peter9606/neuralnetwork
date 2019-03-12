@@ -83,14 +83,19 @@ void Dropout::fwdPropagation() {
     cudnnHandle_t cudnn_handle = nn->getCudnnHandle();
     float* d_x                 = up->getTensor();
 
-    checkCUDNN(cudnnDropoutForward(cudnn_handle,
-                                   dropout_desc_,
-                                   y_desc_,
-                                   d_x,
-                                   y_desc_,
-                                   d_y_,
-                                   d_reserve_space_,
-                                   reserve_space_size_in_bytes_));
+    if (nn->isInferenceOnly()) {
+        checkCudaErrors(cudaMemcpyAsync(
+            d_y_, d_x, getTensorSizeInBytes(), cudaMemcpyDeviceToDevice));
+    } else {
+        checkCUDNN(cudnnDropoutForward(cudnn_handle,
+                                       dropout_desc_,
+                                       y_desc_,
+                                       d_x,
+                                       y_desc_,
+                                       d_y_,
+                                       d_reserve_space_,
+                                       reserve_space_size_in_bytes_));
+    }
 }
 
 void Dropout::bwdPropagation() {

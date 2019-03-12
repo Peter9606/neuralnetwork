@@ -205,4 +205,8 @@ void NetworkImpl::updateWorkspaceSize(size_t size) const {
     workspace_size_ = size;
 }
 
+bool NetworkImpl::isInferenceOnly() const {
+    return inference_only_;
+}
+
 }  // namespace nn

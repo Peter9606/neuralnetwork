@@ -184,11 +184,19 @@ class NetworkImpl : public Network,
      */
     void updateWeights() const;
 
+    /**
+     * @brief if network is inference only
+     *
+     * @return true if inference only, otherwise false
+     */
+    virtual bool isInferenceOnly() const;
+
  protected:
     const int batch_size_;
-    shared_ptr<logger> log_ = Logger::getLogger();
-    float alpha_            = 1.0f;
-    float beta_             = 0.0f;
+    shared_ptr<logger> log_      = Logger::getLogger();
+    float alpha_                 = 1.0f;
+    float beta_                  = 0.0f;
+    mutable bool inference_only_ = false;
     Dim dim_;
     SolverSetting solver_setting_;
     mutable float learning_rate_;
