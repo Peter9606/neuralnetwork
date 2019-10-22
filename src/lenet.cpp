@@ -13,9 +13,6 @@
 #include <iostream>
 #include <memory>
 #include <vector>
-#include "neuralnetwork/lenet.h"
-
-#include "neuralnetwork/readubyte.h"
 
 #include "neuralnetwork/error_check.h"
 #include "neuralnetwork/gpu/compution.cuh"
@@ -28,7 +25,9 @@
 #include "neuralnetwork/layers/pool.h"
 #include "neuralnetwork/layers/softmax.h"
 #include "neuralnetwork/layers/unpool.h"
+#include "neuralnetwork/lenet.h"
 #include "neuralnetwork/network_impl.h"
+#include "neuralnetwork/readubyte.h"
 
 using nn::layers::Activation;
 using nn::layers::Conv;
@@ -117,6 +116,8 @@ void LeNet::train(const shared_ptr<vector<float>> &h_data_train,
     const size_t train_size = h_label_train->size();
 
     const int total_iter = 10000;
+    float *d_label;
+    checkCudaErrors(cudaMalloc(&d_label, sizeof(float) * batch_size_));
     for (int iter = 0; iter < total_iter; ++iter) {
         int imageid = iter % (train_size / batch_size_);
 
@@ -129,8 +130,6 @@ void LeNet::train(const shared_ptr<vector<float>> &h_data_train,
                             sizeof(float) * data_len,
                             cudaMemcpyHostToDevice));
 
-        float *d_label;
-        checkCudaErrors(cudaMalloc(&d_label, sizeof(float) * batch_size_));
         checkCudaErrors(
             cudaMemcpyAsync(d_label,
                             &h_label_train->data()[imageid * batch_size_],
@@ -141,11 +140,18 @@ void LeNet::train(const shared_ptr<vector<float>> &h_data_train,
         bwdPropagation(d_label);
         updateWeights();
         updateLearningRate(iter);
+
+        if (iter % 100 == 0) {
+            auto err = test(h_data_test, h_label_test);
+            log_->info(
+                "Test error rates @ iteration {}: {}", iter, err * 100.0f);
+        }
     }
     checkCudaErrors(cudaDeviceSynchronize());
+    checkCudaErrors(cudaFree(d_label));
     auto t2 = high_resolution_clock::now();
 
-    log_->info("Iteration time: {}",
+    log_->info("Time per iteration: {}",
                duration_cast<microseconds>(t2 - t1).count() / 1000.0f /
                    total_iter);
 
@@ -199,12 +205,13 @@ void LeNet::buildNetwork() {
     auto fc1 = make_shared<FC>("FC1", shared_from_this(), pool2, 500);
     layers_.push_back(fc1);
 
+    /*
     auto dropout =
         make_shared<Dropout>("Dropout", shared_from_this(), fc1, 0.5);
     layers_.push_back(dropout);
+    */
 
-    auto relu1 =
-        make_shared<Activation>("FC1Relu", shared_from_this(), dropout);
+    auto relu1 = make_shared<Activation>("FC1Relu", shared_from_this(), fc1);
     layers_.push_back(relu1);
 
     auto fc2 = make_shared<FC>("FC2", shared_from_this(), relu1, 10);
