@@ -1,0 +1,4 @@
+find . -path ./.git -prune -o  -path ./3rdparty -prune -o  -path  ./tests  -prune -o -user $USER -a -type f -print -exec sed -i 's/ixblas/cublas/g' {} \;
+find . -path ./.git -prune -o  -path ./3rdparty -prune -o  -path  ./tests  -prune -o -user $USER -a -type f -print -exec sed -i 's/IXBLAS/CUBLAS/g' {} \;
+find . -name '*ixblas*' -a -type f -exec rename 's/ixblas/cublas/g' -- {} \;
+find . -name '*ixblas*' -exec rename 's/ixblas/cublas/g' -- {} \;
