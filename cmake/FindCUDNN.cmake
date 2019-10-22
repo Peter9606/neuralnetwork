@@ -20,6 +20,7 @@ find_file(HEADER_PATH
     cudnn.h
     HINTS
     /usr/include
+    /usr/local/cuda/include
     /usr/local/include)
 if("${HEADER_PATH}" STREQUAL HEADER_PATH-NOTFOUND)
     message(FATAL_ERROR "cannot find cudnn header file")
@@ -34,6 +35,7 @@ find_library(LIB_PATH
     HINTS
     /usr/lib
     /usr/local/lib
+	/usr/local/cuda/lib64
     /usr/lib/x86_64-linux-gnu)
 if("${LIB_PATH}" STREQUAL LIB_PATH-NOTFOUND)
     message(FATAL_ERROR "cannot find cudnn library")

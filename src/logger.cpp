@@ -10,12 +10,11 @@
  * ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR
  * OTHER DEALINGS IN THE SOFTWARE.
  */
-#include "neuralnetwork/logger.h"
-
 #include <iostream>
 #include <memory>
 #include <vector>
 
+#include "neuralnetwork/logger.h"
 #include "spdlog/async_logger.h"
 #include "spdlog/sinks/rotating_file_sink.h"
 #include "spdlog/sinks/stdout_color_sinks.h"
@@ -33,23 +32,19 @@ std::shared_ptr<logger> Logger::getLogger() {
 }
 
 Logger::Logger() try {
-#ifndef NDEBUG
     auto console_sink = make_shared<stdout_color_sink_mt>();
     console_sink->set_level(spdlog::level::trace);
-#endif
 
     auto file_sink = make_shared<rotating_file_sink_mt>(
         "neuralnetwork", 1024 * 1024 * 10, 3);
 #ifdef NDEBUG
-    file_sink->set_level(spdlog::level::warn);
+    file_sink->set_level(spdlog::level::info);
 #else
     file_sink->set_level(spdlog::level::info);
 #endif
 
     std::vector<spdlog::sink_ptr> sinks;
-#ifndef NDEBUG
     sinks.push_back(console_sink);
-#endif
     sinks.push_back(file_sink);
 
     logger_ = make_shared<logger>("NN FWK", sinks.begin(), sinks.end());

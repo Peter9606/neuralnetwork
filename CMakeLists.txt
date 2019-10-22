@@ -10,34 +10,78 @@
 # OTHER DEALINGS IN THE SOFTWARE.
 
 cmake_minimum_required (VERSION 3.9)
+
+set(CUDA_COMPILER "clang")
+if(CUDA_COMPILER STREQUAL "clang")
+	message(STATUS "CUDA_COMPILER == clang, changing to clang++-7 and clang-7")
+	set(CMAKE_CXX_COMPILER /usr/bin/clang++-7)
+	set(CMAKE_C_COMPILER /usr/bin/clang-7)
+endif()
 project (NeuralNetwork)
 
+set(CMAKE_BUILD_TYPE Release)
 option(CPPCHECK "use cpplint to check code" ON)
 
 # utilities
+find_package(CUDA 8 REQUIRED)
 include(${CMAKE_CURRENT_SOURCE_DIR}/cmake/FindCUDNN.cmake)
 
-# NVCC flags
-find_package(CUDA 8 REQUIRED)
-set(CUDA_NVCC_FLAGS ${CUDA_NVCC_FLAGS};-std=c++11)
-set(CUDA_NVCC_FLAGS ${CUDA_NVCC_FLAGS};-Xcompiler)
-if(CMAKE_BUILD_TYPE STREQUAL "Debug")
-    set(CUDA_NVCC_FLAGS ${CUDA_NVCC_FLAGS};-lineinfo)
-    set(CUDA_NVCC_FLAGS ${CUDA_NVCC_FLAGS};-G)
-    set(CUDA_NVCC_FLAGS ${CUDA_NVCC_FLAGS};-g)
+if(CUDA_COMPILER STREQUAL "clang")
+    string(APPEND CMAKE_CXX_FLAGS " --std=c++11")
+    string(APPEND CMAKE_CXX_FLAGS " --cuda-path=${CUDA_TOOLKIT_ROOT_DIR}")
+    string(APPEND CMAKE_CXX_FLAGS " -mllvm -pragma-unroll-threshold=100000")
+    string(APPEND CMAKE_CXX_FLAGS " -mllvm -unroll-threshold=5000")
+    string(APPEND CMAKE_CXX_FLAGS " -Wno-unused-command-line-argument")
+    string(APPEND CMAKE_CXX_FLAGS " --cuda-gpu-arch=sm_60") #GTX1030, GTX1050, GTX1060, GTX1070, GTX1080, Tesla P40, Tesla P4, Titan Xp
+    # string(APPEND CMAKE_CXX_FLAGS " --cuda-gpu-arch=sm_70") #Tesla V100, GTX1180, Titan V, Quadro GV100
+    # needed for libcublasLt.so in case it's installed in the same location as libcudart.so
+    # dynamic linker can find it if linker sets RPATH (forced by --disable-new-tags)
+    # Otherwise linker uses RUNPATH and that does not propagate to loaded libs.
+    string(APPEND CMAKE_CXX_FLAGS " -Wl,--disable-new-dtags")
+
+    link_libraries(${CUDA_CUDART_LIBRARY})
+    # Treat CUDA files as C++ files
+    macro(cuda_add_library)
+        foreach(File ${ARGN})
+            if(${File} MATCHES ".*\.cu$")
+                set_source_files_properties(${File} PROPERTIES LANGUAGE CXX)
+            endif()
+        endforeach()
+        add_library(${ARGN})
+    endmacro()
+    macro(cuda_add_executable)
+        foreach(File ${ARGN})
+            if(${File} MATCHES ".*\.cu$")
+                set_source_files_properties(${File} PROPERTIES LANGUAGE CXX)
+            endif()
+        endforeach()
+        add_executable(${ARGN})
+    endmacro()
 else()
-    set(CUDA_NVCC_FLAGS ${CUDA_NVCC_FLAGS};-DNDEBUG)
-    set(CUDA_NVCC_FLAGS ${CUDA_NVCC_FLAGS};-O3)
+	# NVCC flags
+	find_package(CUDA 8 REQUIRED)
+	set(CUDA_NVCC_FLAGS ${CUDA_NVCC_FLAGS};-std=c++11)
+	set(CUDA_NVCC_FLAGS ${CUDA_NVCC_FLAGS};-Xcompiler)
+	if(CMAKE_BUILD_TYPE STREQUAL "Debug")
+		set(CUDA_NVCC_FLAGS ${CUDA_NVCC_FLAGS};-lineinfo)
+		set(CUDA_NVCC_FLAGS ${CUDA_NVCC_FLAGS};-G)
+		set(CUDA_NVCC_FLAGS ${CUDA_NVCC_FLAGS};-g)
+	else()
+		set(CUDA_NVCC_FLAGS ${CUDA_NVCC_FLAGS};-DNDEBUG)
+		set(CUDA_NVCC_FLAGS ${CUDA_NVCC_FLAGS};-O3)
+	endif()
+
+	list(APPEND SMS 60 61)
+	foreach(SM ${SMS})
+		set(CUDA_NVCC_FLAGS
+			${CUDA_NVCC_FLAGS};-gencode arch=compute_${SM},code=sm_${SM})
+	endforeach()
+	set(CUDA_NVCC_FLAGS ${CUDA_NVCC_FLAGS};-gencode arch=compute_60,code=compute_60)
+	set(CUDA_PROPAGATE_HOST_FLAGS OFF)
+
+	set(CMAKE_CXX_STANDARD 14)
 endif()
 
-list(APPEND SMS 60 61)
-foreach(SM ${SMS})
-    set(CUDA_NVCC_FLAGS
-        ${CUDA_NVCC_FLAGS};-gencode arch=compute_${SM},code=sm_${SM})
-endforeach()
-set(CUDA_NVCC_FLAGS ${CUDA_NVCC_FLAGS};-gencode arch=compute_60,code=compute_60)
-
-set(CUDA_PROPAGATE_HOST_FLAGS OFF)
 
 # Addresses a bug where code is not compiled as C++11 in non-CUDA code and
 # older g++ versions
