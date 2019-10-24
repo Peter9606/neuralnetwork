@@ -97,7 +97,7 @@ float LeNet::test(const shared_ptr<vector<float>> &h_data,
                     chosen = id;
                 }
             }
-            if (chosen != h_label->at(iter * 64 + i)) {
+            if (chosen != h_label->at(iter * batch_size_ + i)) {
                 ++num_errors;
             }
         }
