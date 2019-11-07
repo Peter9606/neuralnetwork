@@ -253,7 +253,7 @@ void Conv::fwdPropagation() {
                                        y_desc_,
                                        d_y_));
     checkCUDNN(cudnnAddTensor(
-        cudnn_handle, &alpha, bias_desc_, d_bias_, alpha, y_desc_, d_y_));
+        cudnn_handle, alpha, bias_desc_, d_bias_, alpha, y_desc_, d_y_));
 }
 
 void Conv::bwdPropagation() {
